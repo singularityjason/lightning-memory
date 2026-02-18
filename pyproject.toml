@@ -1,0 +1,39 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "lightning-memory"
+version = "0.1.0"
+description = "Decentralized agent memory for the Lightning economy. Nostr identity, L402 payments, semantic search."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [{ name = "Jason Sosa" }]
+keywords = ["mcp", "lightning", "nostr", "agent-memory", "l402", "ai-agents"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = [
+    "mcp>=1.0.0",
+    "secp256k1>=0.14.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-asyncio"]
+
+[project.urls]
+Homepage = "https://github.com/lightning-memory/lightning-memory"
+Repository = "https://github.com/lightning-memory/lightning-memory"
+Issues = "https://github.com/lightning-memory/lightning-memory/issues"
+
+[project.scripts]
+lightning-memory = "src.server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]

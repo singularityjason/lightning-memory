@@ -1,0 +1,33 @@
+{
+  "name": "lightning-memory",
+  "display_name": "Lightning Memory",
+  "description": "Decentralized agent memory for the Lightning economy. Store, query, and recall memories with Nostr identity and Lightning micropayments (L402). Agents remember transactions, vendor reputations, spending patterns, and decisions across sessions.",
+  "version": "0.1.0",
+  "author": "Jason Sosa",
+  "license": "MIT",
+  "homepage": "https://github.com/lightning-memory/lightning-memory",
+  "repository": "https://github.com/lightning-memory/lightning-memory",
+  "categories": ["memory", "payments", "ai-agents"],
+  "tags": ["lightning", "nostr", "l402", "memory", "agent-memory", "bitcoin", "mcp"],
+  "runtime": "python",
+  "install": {
+    "pip": "lightning-memory"
+  },
+  "config": {
+    "command": "lightning-memory"
+  },
+  "tools": [
+    {
+      "name": "memory_store",
+      "description": "Store a memory (transaction, vendor, preference, error, decision, or general)."
+    },
+    {
+      "name": "memory_query",
+      "description": "Search memories by relevance using full-text search with BM25 ranking."
+    },
+    {
+      "name": "memory_list",
+      "description": "List memories filtered by type and time range."
+    }
+  ]
+}
