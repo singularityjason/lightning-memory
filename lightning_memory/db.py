@@ -19,10 +19,13 @@ def _get_db_path() -> Path:
     return path
 
 
-def get_connection(db_path: Path | None = None) -> sqlite3.Connection:
+def get_connection(db_path: Path | str | None = None) -> sqlite3.Connection:
     """Create a connection and ensure schema exists."""
-    path = db_path or _get_db_path()
-    conn = sqlite3.connect(str(path))
+    if db_path is not None and str(db_path) == ":memory:":
+        conn = sqlite3.connect(":memory:")
+    else:
+        path = db_path or _get_db_path()
+        conn = sqlite3.connect(str(path))
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")

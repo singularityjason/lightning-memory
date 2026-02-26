@@ -28,12 +28,12 @@ dependencies = [
 dev = ["pytest", "pytest-asyncio"]
 
 [project.urls]
-Homepage = "https://github.com/lightning-memory/lightning-memory"
-Repository = "https://github.com/lightning-memory/lightning-memory"
-Issues = "https://github.com/lightning-memory/lightning-memory/issues"
+Homepage = "https://github.com/singularityjason/lightning-memory"
+Repository = "https://github.com/singularityjason/lightning-memory"
+Issues = "https://github.com/singularityjason/lightning-memory/issues"
 
 [project.scripts]
-lightning-memory = "src.server:main"
+lightning-memory = "lightning_memory.server:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src"]
+packages = ["lightning_memory"]

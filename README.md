@@ -28,7 +28,7 @@ pip install lightning-memory
 Or from source:
 
 ```bash
-git clone https://github.com/lightning-memory/lightning-memory
+git clone https://github.com/singularityjason/lightning-memory
 cd lightning-memory
 pip install -e .
 ```
@@ -62,7 +62,7 @@ Add to `claude_desktop_config.json`:
   "mcpServers": {
     "lightning-memory": {
       "command": "python",
-      "args": ["-m", "src.server"]
+      "args": ["-m", "lightning_memory.server"]
     }
   }
 }
