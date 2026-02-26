@@ -1,4 +1,4 @@
-"""Lightning Memory MCP server: 6 tools for agent memory + Lightning intelligence."""
+"""Lightning Memory MCP server: 8 tools for agent memory, intelligence, and sync."""
 
 from __future__ import annotations
 
@@ -200,6 +200,71 @@ def ln_anomaly_check(vendor: str, amount_sats: int) -> dict:
     intel = _get_intelligence()
     report = intel.anomaly_check(vendor, amount_sats)
     return {"anomaly": report.to_dict()}
+
+
+@mcp.tool()
+def memory_sync(direction: str = "both") -> dict:
+    """Sync memories with Nostr relays.
+
+    Push local memories to relays and/or pull remote memories to local.
+    Requires secp256k1 for push (signing). Pull works with any identity.
+
+    Args:
+        direction: Sync direction. One of:
+            - "push": Upload local memories to relays
+            - "pull": Download memories from relays
+            - "both": Push then pull (default)
+
+    Returns:
+        Sync result with counts of pushed/pulled memories and any errors.
+    """
+    from .sync import pull_memories, push_memories, SyncResult
+
+    engine = _get_engine()
+    combined = SyncResult()
+
+    if direction in ("push", "both"):
+        push_result = push_memories(engine.conn, engine.identity)
+        combined.pushed = push_result.pushed
+        combined.errors.extend(push_result.errors)
+
+    if direction in ("pull", "both"):
+        pull_result = pull_memories(engine.conn, engine.identity)
+        combined.pulled = pull_result.pulled
+        combined.errors.extend(pull_result.errors)
+
+    return {
+        "status": "completed",
+        "direction": direction,
+        **combined.to_dict(),
+    }
+
+
+@mcp.tool()
+def memory_export(limit: int = 100) -> dict:
+    """Export memories as Nostr NIP-78 events.
+
+    Converts local memories into portable Nostr event format.
+    Events are signed if secp256k1 is available.
+    Useful for backup, sharing, or manual relay publishing.
+
+    Args:
+        limit: Maximum number of memories to export (default 100).
+
+    Returns:
+        List of NIP-78 events with memory content.
+    """
+    from .sync import export_memories
+
+    engine = _get_engine()
+    limit = min(limit, 1000)
+    events = export_memories(engine.conn, engine.identity, limit)
+    return {
+        "count": len(events),
+        "signed": engine.identity.has_signing,
+        "agent_pubkey": engine.identity.public_key_hex,
+        "events": events,
+    }
 
 
 def main():

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "lightning-memory"
-version = "0.2.0"
+version = "0.3.0"
 description = "Decentralized agent memory for the Lightning economy. Nostr identity, L402 payments, semantic search."
 readme = "README.md"
 license = "MIT"
@@ -21,11 +21,12 @@ classifiers = [
 
 dependencies = [
     "mcp>=1.0.0",
-    "secp256k1>=0.14.0",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "pytest-asyncio"]
+crypto = ["secp256k1>=0.14.0"]
+sync = ["websockets>=12.0", "secp256k1>=0.14.0"]
+dev = ["pytest", "pytest-asyncio", "websockets>=12.0", "secp256k1>=0.14.0"]
 
 [project.urls]
 Homepage = "https://github.com/singularityjason/lightning-memory"

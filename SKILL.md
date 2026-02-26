@@ -55,6 +55,20 @@ ln_anomaly_check(vendor="bitrefill.com", amount_sats=5000)
 ```
 Returns: verdict (normal/high/first_time), historical average, context.
 
+## Sync Tools (Nostr)
+
+### Sync with relays
+```
+memory_sync(direction="both")
+```
+Push local memories to Nostr relays and/or pull remote events. Requires `lightning-memory[sync]`.
+
+### Export as Nostr events
+```
+memory_export(limit=100)
+```
+Export memories as portable NIP-78 events (signed if secp256k1 available).
+
 ## Memory Types
 
 | Type | Use for |

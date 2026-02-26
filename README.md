@@ -127,6 +127,26 @@ ln_anomaly_check(vendor="bitrefill.com", amount_sats=5000)
 # → {anomaly: {verdict: "high", context: "5000 sats is 11.1x the historical average..."}}
 ```
 
+### `memory_sync`
+
+Sync memories with Nostr relays (push and/or pull).
+
+```
+memory_sync(direction="both")  # "push", "pull", or "both"
+# → {pushed: 5, pulled: 3, errors: []}
+```
+
+Requires `pip install lightning-memory[sync]` for relay support.
+
+### `memory_export`
+
+Export memories as portable NIP-78 Nostr events.
+
+```
+memory_export(limit=50)
+# → {count: 50, signed: true, events: [...]}
+```
+
 ## How It Works
 
 1. **First run**: A Nostr keypair is generated and stored at `~/.lightning-memory/keys/`
@@ -150,7 +170,7 @@ All data is stored locally:
 
 - [x] Phase 1: MCP server with local SQLite storage
 - [x] Phase 2: Lightning intelligence layer (vendor reputation, spending summary, anomaly detection)
-- [ ] Phase 3: Nostr relay sync (NIP-78 memory events)
+- [x] Phase 3: Nostr relay sync (NIP-78 events, Schnorr signing, bidirectional sync)
 - [ ] Phase 4: L402 payment layer for hosted query service
 
 ## License

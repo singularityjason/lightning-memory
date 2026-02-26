@@ -1,7 +1,7 @@
-"""Nostr identity layer: keypair generation, NIP-78 event structures.
+"""Nostr identity layer: keypair generation, NIP-78 event structures, Schnorr signing.
 
-Phase 1: Local keypair generation and storage.
-Phase 2: Relay publishing/reading of NIP-78 memory events.
+Supports full NIP-01 event signing when secp256k1 is available.
+Falls back to unsigned events (local-only) without it.
 """
 
 from __future__ import annotations
@@ -38,6 +38,80 @@ class NostrIdentity:
     @property
     def public_key_hex(self) -> str:
         return self.public_key.hex()
+
+    @property
+    def has_signing(self) -> bool:
+        """Check if this identity can produce valid Schnorr signatures.
+
+        Verifies both that secp256k1 is available AND that the stored
+        public key matches the one derived from the private key (rules out
+        SHA256-fallback identities).
+        """
+        try:
+            import secp256k1
+            pk = secp256k1.PrivateKey(self.private_key)
+            derived_pubkey = pk.pubkey.serialize()[1:33]
+            return derived_pubkey == self.public_key
+        except Exception:
+            return False
+
+    def sign_event(self, event: dict) -> dict:
+        """Sign a Nostr event with BIP-340 Schnorr signature.
+
+        Adds the 'sig' field to the event dict. Requires secp256k1.
+        Raises RuntimeError if signing is not available.
+        """
+        try:
+            import secp256k1
+        except ImportError:
+            raise RuntimeError(
+                "secp256k1 is required for event signing. "
+                "Install with: pip install lightning-memory[crypto]"
+            )
+
+        event_id_bytes = bytes.fromhex(event["id"])
+        privkey = secp256k1.PrivateKey(self.private_key)
+        sig = privkey.schnorr_sign(event_id_bytes, bip340tag=None, raw=True)
+        event["sig"] = sig.hex()
+        return event
+
+    def verify_signature(self, event: dict) -> bool:
+        """Verify a Nostr event's Schnorr signature and event ID integrity.
+
+        Checks two things:
+        1. Event ID matches SHA256 of serialized event fields (NIP-01)
+        2. Signature is valid for the event ID using the event's pubkey
+        """
+        try:
+            import secp256k1
+        except ImportError:
+            raise RuntimeError(
+                "secp256k1 is required for signature verification. "
+                "Install with: pip install lightning-memory[crypto]"
+            )
+
+        try:
+            # Step 1: Verify event ID matches serialized content
+            serialized = json.dumps(
+                [0, event["pubkey"], event["created_at"], event["kind"],
+                 event["tags"], event["content"]],
+                separators=(",", ":"),
+                ensure_ascii=False,
+            )
+            expected_id = hashlib.sha256(serialized.encode()).hexdigest()
+            if expected_id != event["id"]:
+                return False
+
+            # Step 2: Verify Schnorr signature
+            event_id_bytes = bytes.fromhex(event["id"])
+            sig_bytes = bytes.fromhex(event["sig"])
+            pubkey_bytes = bytes.fromhex(event["pubkey"])
+
+            full_pubkey = b"\x02" + pubkey_bytes
+            pubkey_obj = secp256k1.PublicKey(full_pubkey, raw=True)
+            return pubkey_obj.schnorr_verify(event_id_bytes, sig_bytes, bip340tag=None, raw=True)
+        except Exception:
+            return False
 
     @classmethod
     def generate(cls) -> NostrIdentity:
@@ -89,14 +163,15 @@ class NostrIdentity:
         memory_type: str,
         memory_id: str,
         metadata: dict | None = None,
+        sign: bool = False,
     ) -> dict:
-        """Create an unsigned NIP-78 event for a memory.
+        """Create a NIP-78 event for a memory.
 
-        The event follows the Nostr event structure but is not signed yet.
-        Phase 2 will add proper Schnorr signing and relay publishing.
+        Args:
+            sign: If True and secp256k1 is available, sign the event.
 
         Returns:
-            dict with Nostr event fields (kind, pubkey, created_at, tags, content)
+            dict with Nostr event fields (kind, pubkey, created_at, tags, content, id, [sig])
         """
         now = int(time.time())
 
@@ -124,5 +199,8 @@ class NostrIdentity:
             ensure_ascii=False,
         )
         event["id"] = hashlib.sha256(serialized.encode()).hexdigest()
+
+        if sign:
+            self.sign_event(event)
 
         return event
