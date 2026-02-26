@@ -100,6 +100,33 @@ List memories with optional filters.
 memory_list(type="transaction", since="24h", limit=20)
 ```
 
+### `ln_vendor_reputation`
+
+Check a vendor's reputation based on transaction history.
+
+```
+ln_vendor_reputation(vendor="bitrefill.com")
+# → {reputation: {total_txns: 12, success_rate: 0.92, avg_sats: 450}, recommendation: "reliable"}
+```
+
+### `ln_spending_summary`
+
+Get a spending breakdown for budget awareness.
+
+```
+ln_spending_summary(since="30d")
+# → {summary: {total_sats: 15000, by_vendor: {"bitrefill.com": 9000, ...}, txn_count: 25}}
+```
+
+### `ln_anomaly_check`
+
+Check if a proposed payment looks normal compared to history.
+
+```
+ln_anomaly_check(vendor="bitrefill.com", amount_sats=5000)
+# → {anomaly: {verdict: "high", context: "5000 sats is 11.1x the historical average..."}}
+```
+
 ## How It Works
 
 1. **First run**: A Nostr keypair is generated and stored at `~/.lightning-memory/keys/`
@@ -122,9 +149,9 @@ All data is stored locally:
 ## Roadmap
 
 - [x] Phase 1: MCP server with local SQLite storage
-- [ ] Phase 2: Nostr relay sync (NIP-78 memory events)
-- [ ] Phase 3: L402 payment layer for hosted query service
-- [ ] Phase 4: Web dashboard, one-liner install, Smithery remote deployment
+- [x] Phase 2: Lightning intelligence layer (vendor reputation, spending summary, anomaly detection)
+- [ ] Phase 3: Nostr relay sync (NIP-78 memory events)
+- [ ] Phase 4: L402 payment layer for hosted query service
 
 ## License
 

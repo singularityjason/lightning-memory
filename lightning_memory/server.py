@@ -1,9 +1,10 @@
-"""Lightning Memory MCP server: 3 core tools for agent memory."""
+"""Lightning Memory MCP server: 6 tools for agent memory + Lightning intelligence."""
 
 from __future__ import annotations
 
 from mcp.server.fastmcp import FastMCP
 
+from .intelligence import IntelligenceEngine
 from .memory import MemoryEngine
 
 mcp = FastMCP(
@@ -131,6 +132,74 @@ def memory_list(
         "agent_pubkey": stats["agent_pubkey"],
         "memories": results,
     }
+
+
+def _get_intelligence() -> IntelligenceEngine:
+    engine = _get_engine()
+    return IntelligenceEngine(conn=engine.conn)
+
+
+@mcp.tool()
+def ln_vendor_reputation(vendor: str) -> dict:
+    """Check a vendor's reputation based on transaction history.
+
+    Use this before paying a vendor to see if they're reliable.
+    Aggregates all past transactions to build a reputation score.
+
+    Args:
+        vendor: Vendor name or domain (e.g., "bitrefill.com", "openai").
+
+    Returns:
+        Reputation report: total transactions, total sats spent,
+        success rate, average payment size, and tags.
+    """
+    intel = _get_intelligence()
+    rep = intel.vendor_report(vendor)
+    return {
+        "reputation": rep.to_dict(),
+        "recommendation": (
+            "reliable" if rep.success_rate >= 0.9 and rep.total_txns >= 3
+            else "new" if rep.total_txns == 0
+            else "caution" if rep.success_rate < 0.7
+            else "limited_data"
+        ),
+    }
+
+
+@mcp.tool()
+def ln_spending_summary(since: str = "30d") -> dict:
+    """Get a spending summary for budget awareness.
+
+    Shows total sats spent, broken down by vendor and protocol.
+
+    Args:
+        since: Time period. Relative: "1h", "24h", "7d", "30d". Or Unix timestamp.
+
+    Returns:
+        Spending breakdown with totals by vendor and protocol.
+    """
+    intel = _get_intelligence()
+    summary = intel.spending_summary(since)
+    return {"summary": summary.to_dict()}
+
+
+@mcp.tool()
+def ln_anomaly_check(vendor: str, amount_sats: int) -> dict:
+    """Check if a proposed payment amount is normal for a vendor.
+
+    Use this before making a payment to catch price anomalies.
+    Compares the proposed amount against historical averages.
+
+    Args:
+        vendor: Vendor name or domain.
+        amount_sats: Proposed payment amount in satoshis.
+
+    Returns:
+        Anomaly report: verdict (normal/high/first_time), context, and historical average.
+    """
+    intel = _get_intelligence()
+    report = intel.anomaly_check(vendor, amount_sats)
+    return {"anomaly": report.to_dict()}
 
 
 def main():

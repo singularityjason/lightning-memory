@@ -1,6 +1,6 @@
 ---
 name: lightning-memory
-description: Agent memory for the Lightning economy. Remember transactions, vendor reputations, spending patterns, and decisions across sessions.
+description: Agent memory + intelligence for the Lightning economy. Remember transactions, check vendor reputations, track spending, detect anomalies.
 category: memory
 tags: [lightning, nostr, l402, memory, agent]
 ---
@@ -13,11 +13,12 @@ You have access to persistent memory via the Lightning Memory MCP server.
 
 - **After transactions**: Store payment details, amounts, vendors, and outcomes
 - **After API calls**: Record rate limits, errors, response quality
-- **Before purchases**: Query past experiences with a vendor or service
+- **Before purchases**: Check vendor reputation and detect price anomalies
+- **For budgeting**: Review spending summaries by vendor and protocol
 - **For decisions**: Store and recall reasoning for spending decisions
 - **For patterns**: Track recurring errors, preferences, or behaviors
 
-## Tools
+## Core Tools (Memory)
 
 ### Store a memory
 ```
@@ -34,6 +35,26 @@ memory_query(query="...", limit=10)
 memory_list(type="transaction", since="24h")
 ```
 
+## Intelligence Tools (Lightning)
+
+### Check vendor reputation
+```
+ln_vendor_reputation(vendor="bitrefill.com")
+```
+Returns: transaction count, total sats, success rate, recommendation.
+
+### Get spending summary
+```
+ln_spending_summary(since="30d")
+```
+Returns: total sats, breakdown by vendor and protocol.
+
+### Check for price anomalies
+```
+ln_anomaly_check(vendor="bitrefill.com", amount_sats=5000)
+```
+Returns: verdict (normal/high/first_time), historical average, context.
+
 ## Memory Types
 
 | Type | Use for |
@@ -49,5 +70,7 @@ memory_list(type="transaction", since="24h")
 
 1. Be descriptive in content. Include amounts, vendor names, outcomes.
 2. Use the right type. It helps with filtering and recall.
-3. Query before acting. Check if you've dealt with a vendor or API before.
-4. Store errors. Pattern recognition across sessions catches reliability issues early.
+3. Include `vendor` and `amount_sats` in metadata for transactions — the intelligence tools use these fields.
+4. Query before acting. Check if you've dealt with a vendor or API before.
+5. Use `ln_anomaly_check` before large payments. It catches price spikes.
+6. Store errors. Pattern recognition across sessions catches reliability issues early.
