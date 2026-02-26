@@ -147,6 +147,95 @@ memory_export(limit=50)
 # → {count: 50, signed: true, events: [...]}
 ```
 
+### `ln_budget_status`
+
+Check L402 gateway earnings and payment stats.
+
+```
+ln_budget_status()
+# → {total_earned_sats: 150, total_payments: 42, by_operation: {"memory_query": 80, ...}}
+```
+
+## L402 Gateway
+
+Lightning Memory includes an L402 pay-per-query HTTP gateway. Remote agents pay Lightning micropayments to query your memory engine — no API keys, no accounts.
+
+### Install
+
+```bash
+pip install lightning-memory[gateway]
+```
+
+### Start
+
+```bash
+lightning-memory-gateway
+# Listening on 0.0.0.0:8402
+```
+
+### How L402 Works
+
+```
+Agent                          Gateway                      Phoenixd
+  |                               |                            |
+  |-- GET /memory/query?q=... --->|                            |
+  |<-- 402 + Lightning invoice ---|--- create_invoice -------->|
+  |                               |<-- bolt11 + payment_hash --|
+  |                               |                            |
+  | [pay invoice via Lightning]   |                            |
+  |                               |                            |
+  |-- GET + L402 token ---------->|                            |
+  |   (macaroon:preimage)         |--- verify preimage ------->|
+  |<-- 200 + query results -------|                            |
+```
+
+### Endpoints
+
+| Endpoint | Method | Price | Description |
+|----------|--------|-------|-------------|
+| `/info` | GET | Free | Gateway status, pricing, node info |
+| `/health` | GET | Free | Health check |
+| `/memory/store` | POST | 3 sats | Store a memory |
+| `/memory/query` | GET | 2 sats | Search memories by relevance |
+| `/memory/list` | GET | 1 sat | List memories with filters |
+| `/ln/vendor/{name}` | GET | 3 sats | Vendor reputation report |
+| `/ln/spending` | GET | 2 sats | Spending summary |
+| `/ln/anomaly-check` | POST | 3 sats | Payment anomaly detection |
+
+### Phoenixd Setup
+
+The gateway needs a Lightning node to create invoices. [Phoenixd](https://phoenix.acinq.co/server) is the simplest option — zero config, auto channel management.
+
+1. Download and run Phoenixd (listens on `localhost:9740`)
+2. Fund it with ~10,000 sats for initial channel opening
+3. Configure the gateway:
+
+```bash
+mkdir -p ~/.lightning-memory
+cat > ~/.lightning-memory/config.json << 'EOF'
+{
+  "phoenixd_password": "<from ~/.phoenix/phoenix.conf>"
+}
+EOF
+```
+
+4. Start: `lightning-memory-gateway`
+
+### Client Example
+
+```bash
+# Using lnget (auto-pays Lightning invoices):
+lnget https://your-server.com/ln/vendor/bitrefill
+
+# Manual flow with curl:
+curl https://your-server.com/memory/query?q=openai+rate+limits
+# → 402 + invoice in WWW-Authenticate header
+# Pay the invoice, extract preimage
+curl -H "Authorization: L402 <macaroon>:<preimage>" \
+  https://your-server.com/memory/query?q=openai+rate+limits
+# → 200 + relevant memories
+```
+
 ## How It Works
 
 1. **First run**: A Nostr keypair is generated and stored at `~/.lightning-memory/keys/`
@@ -171,7 +260,7 @@ All data is stored locally:
 - [x] Phase 1: MCP server with local SQLite storage
 - [x] Phase 2: Lightning intelligence layer (vendor reputation, spending summary, anomaly detection)
 - [x] Phase 3: Nostr relay sync (NIP-78 events, Schnorr signing, bidirectional sync)
-- [ ] Phase 4: L402 payment layer for hosted query service
+- [x] Phase 4: L402 payment gateway (macaroons, Phoenixd, Starlette HTTP gateway)
 
 ## License
 

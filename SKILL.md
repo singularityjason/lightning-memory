@@ -55,6 +55,12 @@ ln_anomaly_check(vendor="bitrefill.com", amount_sats=5000)
 ```
 Returns: verdict (normal/high/first_time), historical average, context.
 
+### Check gateway earnings
+```
+ln_budget_status()
+```
+Returns: total sats earned from L402 payments, payment count, breakdown by operation.
+
 ## Sync Tools (Nostr)
 
 ### Sync with relays
@@ -79,6 +85,10 @@ Export memories as portable NIP-78 events (signed if secp256k1 available).
 | `error` | Error patterns, rate limits, failures |
 | `decision` | Key decisions and reasoning |
 | `general` | Everything else |
+
+## L402 Gateway
+
+Lightning Memory also runs as a paid HTTP gateway (`lightning-memory-gateway`) on port 8402. Remote agents pay Lightning micropayments to query your memory engine. Use `ln_budget_status` to check earnings.
 
 ## Best Practices
 

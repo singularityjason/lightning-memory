@@ -18,6 +18,15 @@ DEFAULT_RELAYS = [
     "wss://relay.nostr.band",
 ]
 
+DEFAULT_PRICING = {
+    "memory_store": 3,
+    "memory_query": 2,
+    "memory_list": 1,
+    "ln_vendor_reputation": 3,
+    "ln_spending_summary": 2,
+    "ln_anomaly_check": 3,
+}
+
 
 @dataclass
 class Config:
@@ -28,6 +37,11 @@ class Config:
     sync_on_stop: bool = True
     sync_timeout_seconds: int = 30
     max_events_per_sync: int = 500
+    # L402 gateway settings
+    gateway_port: int = 8402
+    phoenixd_url: str = "http://localhost:9740"
+    phoenixd_password: str = ""
+    pricing: dict[str, int] = field(default_factory=lambda: dict(DEFAULT_PRICING))
 
     def to_dict(self) -> dict:
         return {
@@ -36,6 +50,10 @@ class Config:
             "sync_on_stop": self.sync_on_stop,
             "sync_timeout_seconds": self.sync_timeout_seconds,
             "max_events_per_sync": self.max_events_per_sync,
+            "gateway_port": self.gateway_port,
+            "phoenixd_url": self.phoenixd_url,
+            "phoenixd_password": self.phoenixd_password,
+            "pricing": self.pricing,
         }
 
     def save(self, path: Path | None = None) -> None:
@@ -64,6 +82,10 @@ def load_config(path: Path | None = None) -> Config:
                 sync_on_stop=data.get("sync_on_stop", True),
                 sync_timeout_seconds=data.get("sync_timeout_seconds", 30),
                 max_events_per_sync=data.get("max_events_per_sync", 500),
+                gateway_port=data.get("gateway_port", 8402),
+                phoenixd_url=data.get("phoenixd_url", "http://localhost:9740"),
+                phoenixd_password=data.get("phoenixd_password", ""),
+                pricing=data.get("pricing", dict(DEFAULT_PRICING)),
             )
         except (json.JSONDecodeError, KeyError):
             _cached = Config()

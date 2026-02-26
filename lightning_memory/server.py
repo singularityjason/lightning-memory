@@ -1,4 +1,4 @@
-"""Lightning Memory MCP server: 8 tools for agent memory, intelligence, and sync."""
+"""Lightning Memory MCP server: 9 tools for agent memory, intelligence, and sync."""
 
 from __future__ import annotations
 
@@ -264,6 +264,37 @@ def memory_export(limit: int = 100) -> dict:
         "signed": engine.identity.has_signing,
         "agent_pubkey": engine.identity.public_key_hex,
         "events": events,
+    }
+
+
+@mcp.tool()
+def ln_budget_status() -> dict:
+    """Check L402 gateway earnings and payment stats.
+
+    Shows total sats earned from L402 gateway payments, broken down by operation.
+    Reads from locally stored payment records (logged by the gateway).
+
+    Returns:
+        Earnings summary: total sats, payment count, breakdown by operation.
+    """
+    import json as _json
+
+    engine = _get_engine()
+    payments = engine.list(memory_type="l402_payment", limit=1000)
+    total_sats = 0
+    by_operation: dict[str, int] = {}
+    for p in payments:
+        meta = p.get("metadata", {})
+        if isinstance(meta, str):
+            meta = _json.loads(meta) if meta else {}
+        sats = meta.get("amount_sats", 0)
+        total_sats += sats
+        op = meta.get("operation", "unknown")
+        by_operation[op] = by_operation.get(op, 0) + sats
+    return {
+        "total_earned_sats": total_sats,
+        "total_payments": len(payments),
+        "by_operation": by_operation,
     }
 
 
