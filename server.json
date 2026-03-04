@@ -2,7 +2,7 @@
   "name": "lightning-memory",
   "display_name": "Lightning Memory",
   "description": "Decentralized agent memory for the Lightning economy. Store, query, and recall memories with Nostr identity and Lightning micropayments (L402). Agents remember transactions, vendor reputations, spending patterns, and decisions across sessions.",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "author": "Jason Sosa",
   "license": "MIT",
   "homepage": "https://github.com/singularityjason/lightning-memory",

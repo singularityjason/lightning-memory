@@ -265,3 +265,5 @@ All data is stored locally:
 ## License
 
 MIT
+
+<!-- mcp-name: io.github.singularityjason/lightning-memory -->
