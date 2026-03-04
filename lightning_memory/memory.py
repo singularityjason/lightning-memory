@@ -11,6 +11,27 @@ from . import db
 from .nostr import NostrIdentity
 
 
+def parse_since(since: str) -> float:
+    """Parse a relative time string like '1h', '24h', '7d' into a Unix timestamp."""
+    now = time.time()
+    since = since.strip().lower()
+
+    if since.endswith("h"):
+        hours = float(since[:-1])
+        return now - (hours * 3600)
+    elif since.endswith("d"):
+        days = float(since[:-1])
+        return now - (days * 86400)
+    elif since.endswith("m"):
+        minutes = float(since[:-1])
+        return now - (minutes * 60)
+    else:
+        try:
+            return float(since)
+        except ValueError:
+            return now - 86400
+
+
 class MemoryEngine:
     """Lightweight memory engine backed by SQLite with Nostr identity."""
 
@@ -94,25 +115,7 @@ class MemoryEngine:
 
     def _parse_since(self, since: str) -> float:
         """Parse a relative time string like '1h', '24h', '7d' into a Unix timestamp."""
-        now = time.time()
-        since = since.strip().lower()
-
-        if since.endswith("h"):
-            hours = float(since[:-1])
-            return now - (hours * 3600)
-        elif since.endswith("d"):
-            days = float(since[:-1])
-            return now - (days * 86400)
-        elif since.endswith("m"):
-            minutes = float(since[:-1])
-            return now - (minutes * 60)
-        else:
-            # Try parsing as a Unix timestamp
-            try:
-                return float(since)
-            except ValueError:
-                # Default: last 24 hours
-                return now - 86400
+        return parse_since(since)
 
     def _fallback_query(
         self, query: str, limit: int, memory_type: str | None

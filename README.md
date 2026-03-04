@@ -14,8 +14,8 @@ L3: Lightning Memory (agent memory protocol)
 
 - **Nostr identity**: Agent identity = Nostr keypair. No accounts, no API keys.
 - **Local-first**: SQLite with FTS5 full-text search. Works offline, zero dependencies.
-- **Nostr sync** (Phase 2): Memories written as NIP-78 events to relays. Portable, tamper-proof.
-- **L402 payments** (Phase 3): Pay-per-query hosted service. 1-5 sats per operation.
+- **Nostr sync**: Memories written as NIP-78 events to relays. Portable, tamper-proof.
+- **L402 payments**: Pay-per-query hosted service. 1-5 sats per operation.
 
 ## Quick Start
 

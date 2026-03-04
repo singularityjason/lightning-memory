@@ -232,7 +232,7 @@ async def info(request: Request) -> JSONResponse:
     config = load_config()
     return JSONResponse({
         "service": "lightning-memory-gateway",
-        "version": "0.4.0",
+        "version": __import__("lightning_memory").__version__,
         "pricing": config.pricing,
         "agent_pubkey": stats["agent_pubkey"],
         "total_memories": stats["total"],

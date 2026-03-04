@@ -13,3 +13,11 @@ venv/
 !.env.example
 !.env*.example
 *.db
+.pytest_cache/
+
+# Private/internal — not for public repo
+SKILL.md
+content/
+grants/
+marketing/
+outreach/

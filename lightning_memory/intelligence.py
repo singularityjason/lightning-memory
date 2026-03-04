@@ -64,9 +64,9 @@ class IntelligenceEngine:
 
     def spending_summary(self, since: str = "30d") -> SpendingSummary:
         """Aggregate spending across all transaction memories."""
-        from .memory import MemoryEngine
+        from .memory import parse_since
 
-        since_ts = MemoryEngine._parse_since(None, since)  # type: ignore[arg-type]
+        since_ts = parse_since(since)
 
         rows = self.conn.execute(
             """SELECT content, metadata FROM memories

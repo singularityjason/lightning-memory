@@ -125,7 +125,7 @@ class TestFreeEndpoints:
         assert resp.status_code == 200
         body = resp.json()
         assert body["service"] == "lightning-memory-gateway"
-        assert body["version"] == "0.4.0"
+        assert body["version"] == __import__("lightning_memory").__version__
         assert "pricing" in body
         assert "agent_pubkey" in body
 
