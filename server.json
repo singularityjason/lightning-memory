@@ -1,57 +1,20 @@
 {
-  "name": "lightning-memory",
-  "display_name": "Lightning Memory",
-  "description": "Decentralized agent memory for the Lightning economy. Store, query, and recall memories with Nostr identity and Lightning micropayments (L402). Agents remember transactions, vendor reputations, spending patterns, and decisions across sessions.",
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.singularityjason/lightning-memory",
+  "description": "Decentralized agent memory for the Lightning economy. Nostr identity, L402 payments.",
+  "repository": {
+    "url": "https://github.com/singularityjason/lightning-memory",
+    "source": "github"
+  },
   "version": "0.4.1",
-  "author": "Jason Sosa",
-  "license": "MIT",
-  "homepage": "https://github.com/singularityjason/lightning-memory",
-  "repository": "https://github.com/singularityjason/lightning-memory",
-  "categories": ["memory", "payments", "ai-agents"],
-  "tags": ["lightning", "nostr", "l402", "memory", "agent-memory", "bitcoin", "mcp"],
-  "runtime": "python",
-  "install": {
-    "pip": "lightning-memory"
-  },
-  "config": {
-    "command": "lightning-memory"
-  },
-  "tools": [
+  "packages": [
     {
-      "name": "memory_store",
-      "description": "Store a memory (transaction, vendor, preference, error, decision, or general)."
-    },
-    {
-      "name": "memory_query",
-      "description": "Search memories by relevance using full-text search with BM25 ranking."
-    },
-    {
-      "name": "memory_list",
-      "description": "List memories filtered by type and time range."
-    },
-    {
-      "name": "ln_vendor_reputation",
-      "description": "Check a vendor's reputation based on transaction history (success rate, avg spend, tags)."
-    },
-    {
-      "name": "ln_spending_summary",
-      "description": "Get spending breakdown by vendor and protocol for any time period."
-    },
-    {
-      "name": "ln_anomaly_check",
-      "description": "Detect unusual payment amounts compared to historical patterns."
-    },
-    {
-      "name": "memory_sync",
-      "description": "Push/pull memories to/from Nostr relays (requires sync extras)."
-    },
-    {
-      "name": "memory_export",
-      "description": "Export memories as portable signed NIP-78 Nostr events."
-    },
-    {
-      "name": "ln_budget_status",
-      "description": "Check L402 gateway earnings and payment stats."
+      "registryType": "pypi",
+      "identifier": "lightning-memory",
+      "version": "0.4.1",
+      "transport": {
+        "type": "stdio"
+      }
     }
   ]
 }
