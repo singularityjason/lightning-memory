@@ -41,7 +41,7 @@ lightning-memory
 
 ### Configure in Claude Code
 
-Add to your MCP config (`~/.claude/config.json`):
+Add to your MCP config (`~/.claude.json` under your project key):
 
 ```json
 {
