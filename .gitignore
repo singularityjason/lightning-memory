@@ -16,7 +16,8 @@ venv/
 .pytest_cache/
 
 # Private/internal — not for public repo
-SKILL.md
+/SKILL.md
+!openclaw-skill/SKILL.md
 content/
 grants/
 marketing/
