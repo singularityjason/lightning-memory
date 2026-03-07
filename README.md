@@ -1,5 +1,9 @@
 # Lightning Memory
 
+[![PyPI version](https://img.shields.io/pypi/v/lightning-memory.svg)](https://pypi.org/project/lightning-memory/)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
 Decentralized agent memory for the Lightning economy. Store, query, and recall memories with cryptographic identity (Nostr) and micropayments (Lightning/L402).
 
 **The problem:** AI agents can transact via Lightning (L402) but can't remember what they paid for, which vendors are reliable, or their spending patterns. Lightning Memory fixes this.
@@ -261,6 +265,10 @@ All data is stored locally:
 - [x] Phase 2: Lightning intelligence layer (vendor reputation, spending summary, anomaly detection)
 - [x] Phase 3: Nostr relay sync (NIP-78 events, Schnorr signing, bidirectional sync)
 - [x] Phase 4: L402 payment gateway (macaroons, Phoenixd, Starlette HTTP gateway)
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=singularityjason/lightning-memory&type=Date)](https://star-history.com/#singularityjason/lightning-memory&Date)
 
 ## License
 
