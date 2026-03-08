@@ -298,8 +298,32 @@ def ln_budget_status() -> dict:
     }
 
 
-def main():
-    """Run the MCP server."""
+def main() -> None:
+    """Run the MCP server, or dispatch a CLI subcommand.
+
+    Subcommands:
+      relay-status [--json]   Check relay connectivity and last sync state.
+    """
+    import sys
+
+    args = sys.argv[1:]
+
+    if args and args[0] == "relay-status":
+        from .cli import cmd_relay_status
+
+        raise SystemExit(cmd_relay_status(args[1:]))
+
+    if args and args[0] in ("-h", "--help"):
+        print(
+            "Usage: lightning-memory [subcommand]\n"
+            "\n"
+            "Subcommands:\n"
+            "  relay-status [--json]   Check relay connectivity and last sync state.\n"
+            "\n"
+            "With no subcommand, starts the MCP server."
+        )
+        raise SystemExit(0)
+
     mcp.run()
 
 
