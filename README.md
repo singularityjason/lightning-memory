@@ -6,7 +6,27 @@
 
 Decentralized agent memory for the Lightning economy. Store, query, and recall memories with cryptographic identity (Nostr) and micropayments (Lightning/L402).
 
-**The problem:** AI agents can transact via Lightning (L402) but can't remember what they paid for, which vendors are reliable, or their spending patterns. Lightning Memory fixes this.
+## Why?
+
+AI agents can spend sats over Lightning via L402. But they can't remember what they bought. Every session starts from zero — every vendor is a stranger, every price is accepted at face value, and lessons learned yesterday are gone today. Lightning Memory is the missing memory layer: **L1 settles. L2 pays. L3 remembers.**
+
+<!-- Demo GIF placeholder — replace with terminal recording -->
+<!-- ![Lightning Memory Demo](assets/demo.gif) -->
+
+## How It Compares
+
+| Feature | Lightning Memory | Mem0 | Raw file storage | No memory |
+|---------|:---:|:---:|:---:|:---:|
+| Lightning/L402 awareness | Yes | No | No | No |
+| Vendor reputation tracking | Yes | No | Manual | No |
+| Spending anomaly detection | Yes | No | No | No |
+| Nostr identity (BIP-340) | Yes | No | No | No |
+| Relay sync (NIP-78) | Yes | No | No | No |
+| Full-text search (FTS5) | Yes | Yes | No | No |
+| Agent-to-agent knowledge markets | Yes (L402 gateway) | No | No | No |
+| Local-first / offline | Yes | Cloud | Yes | N/A |
+| MCP native | Yes | Plugin | No | No |
+| Zero config | Yes | API key required | Manual setup | N/A |
 
 ## Architecture
 
