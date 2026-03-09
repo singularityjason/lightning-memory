@@ -225,6 +225,16 @@ EOF
 
 4. Start: `lightning-memory-gateway`
 
+### Docker
+
+Run the gateway and Phoenixd together:
+
+```bash
+PHOENIXD_PASSWORD=your-password docker compose up
+```
+
+This starts the L402 gateway on port 8402 with Phoenixd as a sidecar on port 9740. Lightning state is persisted in a Docker volume.
+
 ### Client Example
 
 ```bash
@@ -238,6 +248,25 @@ curl https://your-server.com/memory/query?q=openai+rate+limits
 curl -H "Authorization: L402 <macaroon>:<preimage>" \
   https://your-server.com/memory/query?q=openai+rate+limits
 # → 200 + relevant memories
+```
+
+## CLI Commands
+
+### `lightning-memory relay-status`
+
+Check connection status for all configured Nostr relays:
+
+```bash
+lightning-memory relay-status
+# Checking 3 relay(s)...
+#
+#   [+] wss://relay.damus.io: OK
+#   [+] wss://nos.lol: OK
+#   [x] wss://relay.nostr.band: FAIL (timeout)
+#
+# 2/3 relays reachable (5.2s)
+# Last pull: 2026-03-09 04:30:12 UTC
+# Memories pushed: 42
 ```
 
 ## How It Works

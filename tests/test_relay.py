@@ -8,6 +8,8 @@ import pytest
 
 from lightning_memory.relay import (
     RelayResponse,
+    check_relay,
+    check_relays,
     fetch_events,
     fetch_from_relays,
     publish_event,
@@ -137,6 +139,40 @@ class TestMultiRelay:
                 ["wss://r1.test", "wss://r2.test"],
                 {"kinds": [30078]},
             ))
+
+        assert len(results) == 2
+
+
+class TestCheckRelay:
+    def test_reachable_relay(self):
+        eose_response = json.dumps(["EOSE", "sub1"])
+        mock_connect = _mock_ws_connect([eose_response])
+
+        with patch("lightning_memory.relay.websockets") as mock_ws:
+            mock_ws.connect = MagicMock(return_value=mock_connect)
+
+            result = asyncio.run(check_relay("wss://test.relay"))
+
+        assert result.success is True
+        assert result.relay == "wss://test.relay"
+
+    def test_unreachable_relay(self):
+        with patch("lightning_memory.relay.websockets") as mock_ws:
+            mock_ws.connect = MagicMock(side_effect=ConnectionRefusedError("refused"))
+
+            result = asyncio.run(check_relay("wss://bad.relay"))
+
+        assert result.success is False
+        assert "refused" in result.message
+
+    def test_check_multiple_relays(self):
+        eose_response = json.dumps(["EOSE", "sub1"])
+        mock_connect = _mock_ws_connect([eose_response])
+
+        with patch("lightning_memory.relay.websockets") as mock_ws:
+            mock_ws.connect = MagicMock(return_value=mock_connect)
+
+            results = asyncio.run(check_relays(["wss://r1", "wss://r2"]))
 
         assert len(results) == 2
 

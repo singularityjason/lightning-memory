@@ -1,0 +1,25 @@
+services:
+  phoenixd:
+    image: acinq/phoenixd:latest
+    ports:
+      - "9740:9740"
+    volumes:
+      - phoenixd-data:/phoenix/.phoenix
+    environment:
+      - PHOENIX_HTTP_PASSWORD=${PHOENIXD_PASSWORD:-changeme}
+
+  gateway:
+    build: .
+    ports:
+      - "8402:8402"
+    depends_on:
+      - phoenixd
+    volumes:
+      - gateway-config:/home/lm/.lightning-memory
+    environment:
+      - PHOENIXD_URL=http://phoenixd:9740
+      - PHOENIXD_PASSWORD=${PHOENIXD_PASSWORD:-changeme}
+
+volumes:
+  phoenixd-data:
+  gateway-config:

@@ -298,8 +298,61 @@ def ln_budget_status() -> dict:
     }
 
 
+def _cmd_relay_status() -> None:
+    """Show connection status for configured Nostr relays."""
+    import asyncio
+    import time
+
+    from .config import load_config
+    from .relay import check_relays
+
+    config = load_config()
+    relays = config.relays
+    print(f"Checking {len(relays)} relay(s)...\n")
+
+    start = time.monotonic()
+    results = asyncio.run(check_relays(relays))
+    elapsed = time.monotonic() - start
+
+    ok_count = 0
+    for r in results:
+        status = "OK" if r.success else "FAIL"
+        icon = "+" if r.success else "x"
+        msg = f"  [{icon}] {r.relay}: {status}"
+        if r.message and r.message != "connected":
+            msg += f" ({r.message})"
+        print(msg)
+        if r.success:
+            ok_count += 1
+
+    print(f"\n{ok_count}/{len(relays)} relays reachable ({elapsed:.1f}s)")
+
+    # Show last sync info if available
+    try:
+        engine = _get_engine()
+        from .sync import _ensure_sync_schema, _get_cursor
+        _ensure_sync_schema(engine.conn)
+        last_pull = _get_cursor(engine.conn, "last_pull_timestamp")
+        if last_pull:
+            from datetime import datetime, timezone
+            ts = datetime.fromtimestamp(float(last_pull), tz=timezone.utc)
+            print(f"Last pull: {ts.strftime('%Y-%m-%d %H:%M:%S UTC')}")
+
+        synced = engine.conn.execute("SELECT COUNT(*) FROM sync_log").fetchone()[0]
+        if synced:
+            print(f"Memories pushed: {synced}")
+    except Exception:
+        pass
+
+
 def main():
-    """Run the MCP server."""
+    """Run the MCP server, or a CLI subcommand."""
+    import sys
+
+    if len(sys.argv) > 1 and sys.argv[1] == "relay-status":
+        _cmd_relay_status()
+        return
+
     mcp.run()
 
 

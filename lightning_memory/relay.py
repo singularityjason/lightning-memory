@@ -131,6 +131,43 @@ async def publish_to_relays(
     return list(await asyncio.gather(*tasks))
 
 
+async def check_relay(relay_url: str, timeout: float = 5.0) -> RelayResponse:
+    """Check if a relay is reachable by opening a WebSocket connection.
+
+    Args:
+        relay_url: WebSocket URL (wss://...)
+        timeout: Connection timeout in seconds
+
+    Returns:
+        RelayResponse with success=True if the relay accepted the connection
+    """
+    if websockets is None:
+        return RelayResponse(
+            relay=relay_url, success=False,
+            message="websockets not installed. pip install lightning-memory[sync]",
+        )
+
+    try:
+        async with websockets.connect(relay_url, close_timeout=2, open_timeout=timeout) as ws:
+            # Send a REQ and immediately close to verify the relay speaks NIP-01
+            sub_id = uuid.uuid4().hex[:8]
+            await ws.send(json.dumps(["REQ", sub_id, {"kinds": [30078], "limit": 0}]))
+            raw = await asyncio.wait_for(ws.recv(), timeout=timeout)
+            await ws.send(json.dumps(["CLOSE", sub_id]))
+            data = json.loads(raw)
+            if isinstance(data, list) and data[0] in ("EOSE", "EVENT", "NOTICE"):
+                return RelayResponse(relay=relay_url, success=True, message="connected")
+            return RelayResponse(relay=relay_url, success=True, message=f"response: {data[0]}")
+    except Exception as e:
+        return RelayResponse(relay=relay_url, success=False, message=str(e))
+
+
+async def check_relays(relay_urls: list[str], timeout: float = 5.0) -> list[RelayResponse]:
+    """Check multiple relays concurrently."""
+    tasks = [check_relay(url, timeout) for url in relay_urls]
+    return list(await asyncio.gather(*tasks))
+
+
 async def fetch_from_relays(
     relay_urls: list[str],
     filters: dict[str, Any],
