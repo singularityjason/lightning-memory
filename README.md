@@ -289,6 +289,27 @@ lightning-memory relay-status
 # Memories pushed: 42
 ```
 
+## Usage with Agents
+
+Lightning Memory is a standard MCP server. You can use it with any MCP-compatible agent host.
+
+### LangChain Integration
+See [examples/langchain_integration.py](./examples/langchain_integration.py) for an example of how to use Lightning Memory with LangChain.
+
+### Claude Desktop
+Add to your `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "lightning-memory": {
+      "command": "lightning-memory",
+      "args": ["serve"]
+    }
+  }
+}
+```
+
 ## How It Works
 
 1. **First run**: A Nostr keypair is generated and stored at `~/.lightning-memory/keys/`
