@@ -373,6 +373,121 @@ def push_trust_assertion(
     return result
 
 
+def push_gateway_announcement(
+    conn: sqlite3.Connection,
+    identity: NostrIdentity,
+    gateway_url: str,
+    operations: dict[str, int] | None = None,
+    relays_list: list[str] | None = None,
+) -> SyncResult:
+    """Create and publish a NIP-78 gateway announcement to relays.
+
+    Requires secp256k1 for signing.
+    """
+    _ensure_sync_schema(conn)
+    config = load_config()
+    result = SyncResult()
+
+    if not identity.has_signing:
+        result.errors.append(
+            "Cannot push: secp256k1 not available. "
+            "Install with: pip install lightning-memory[sync]"
+        )
+        return result
+
+    event = identity.create_gateway_announcement_event(
+        gateway_url=gateway_url,
+        operations=operations or config.pricing,
+        relays=relays_list or config.relays,
+        sign=True,
+    )
+
+    try:
+        responses = asyncio.run(
+            publish_to_relays(config.relays, event, config.sync_timeout_seconds)
+        )
+        success_count = sum(1 for r in responses if r.success)
+        if success_count > 0:
+            result.pushed = 1
+        else:
+            errors = [f"{r.relay}: {r.message}" for r in responses if not r.success]
+            result.errors.extend(errors)
+    except Exception as e:
+        result.errors.append(f"Push failed: {e}")
+
+    return result
+
+
+def pull_gateway_announcements(
+    conn: sqlite3.Connection,
+    identity: NostrIdentity,
+) -> SyncResult:
+    """Pull gateway announcement events from relays.
+
+    Fetches kind 30078 events with type:gateway tag, stores in known_gateways.
+    """
+    _ensure_sync_schema(conn)
+    config = load_config()
+    result = SyncResult()
+
+    filters: dict[str, Any] = {
+        "kinds": [KIND_NIP78],
+        "limit": config.max_events_per_sync,
+    }
+
+    try:
+        responses = asyncio.run(
+            fetch_from_relays(config.relays, filters, config.sync_timeout_seconds)
+        )
+    except Exception as e:
+        result.errors.append(f"Fetch failed: {e}")
+        return result
+
+    seen_ids: set[str] = set()
+    for resp in responses:
+        if not resp.success:
+            result.errors.append(f"{resp.relay}: {resp.message}")
+            continue
+        for event in resp.events:
+            eid = event.get("id", "")
+            if not eid or eid in seen_ids:
+                continue
+            seen_ids.add(eid)
+
+            # Only process gateway announcements
+            type_tag = _extract_tag(event, "type")
+            if type_tag != "gateway":
+                continue
+
+            try:
+                content = json.loads(event.get("content", "{}"))
+            except (json.JSONDecodeError, TypeError):
+                continue
+
+            url = content.get("url", "")
+            if not url:
+                continue
+
+            pubkey = event.get("pubkey", "")
+            operations = json.dumps(content.get("operations", {}))
+            relays_json = json.dumps(content.get("relays", []))
+            now = time.time()
+
+            conn.execute(
+                "INSERT INTO known_gateways "
+                "(agent_pubkey, url, operations, relays, nostr_event_id, last_seen, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(agent_pubkey) DO UPDATE SET "
+                "url=excluded.url, operations=excluded.operations, relays=excluded.relays, "
+                "nostr_event_id=excluded.nostr_event_id, last_seen=excluded.last_seen",
+                (pubkey, url, operations, relays_json, eid, now, now),
+            )
+            conn.commit()
+            result.pulled += 1
+
+    return result
+
+
 def export_memories(
     conn: sqlite3.Connection,
     identity: NostrIdentity,

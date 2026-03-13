@@ -381,3 +381,95 @@ def test_pull_skips_kya_events(sync_db, signing_identity):
             result = pull_memories(sync_db, signing_identity)
 
     assert result.pulled == 0  # Skipped due to type:kya tag
+
+
+def test_push_gateway_announcement(tmp_db, signing_identity):
+    """push_gateway_announcement should create and publish gateway event."""
+    from unittest.mock import patch, MagicMock
+    from lightning_memory.sync import push_gateway_announcement
+
+    mock_responses = [MagicMock(success=True)]
+    with patch("lightning_memory.sync.publish_to_relays", return_value=mock_responses) as mock_pub:
+        with patch("lightning_memory.sync.load_config") as mock_cfg:
+            mock_cfg.return_value.relays = ["wss://test"]
+            mock_cfg.return_value.sync_timeout_seconds = 5
+            mock_cfg.return_value.pricing = {"memory_query": 2}
+            result = push_gateway_announcement(
+                tmp_db, signing_identity,
+                gateway_url="https://gw.example.com",
+                operations={"memory_query": 2},
+            )
+    assert result.pushed == 1
+    mock_pub.assert_called_once()
+    # Verify the event passed to publish has type:gateway tag
+    event = mock_pub.call_args[0][1]
+    type_tags = [t for t in event["tags"] if t[0] == "type"]
+    assert type_tags[0][1] == "gateway"
+
+
+def test_pull_gateway_announcements(tmp_db, tmp_identity):
+    """pull_gateway_announcements should store gateways from relay events."""
+    import json
+    from unittest.mock import patch, MagicMock
+    from lightning_memory.sync import pull_gateway_announcements
+
+    fake_event = {
+        "id": "abc123" * 10 + "abcd",
+        "kind": 30078,
+        "pubkey": "beef" * 16,
+        "created_at": 1700000000,
+        "tags": [
+            ["d", "gateway:" + "beef" * 16],
+            ["type", "gateway"],
+        ],
+        "content": json.dumps({
+            "url": "https://remote-gw.example.com",
+            "operations": {"memory_query": 3},
+            "relays": ["wss://relay.damus.io"],
+            "version": "0.6.0",
+        }),
+    }
+    mock_resp = MagicMock(success=True, events=[fake_event])
+    with patch("lightning_memory.sync.fetch_from_relays", return_value=[mock_resp]):
+        result = pull_gateway_announcements(tmp_db, tmp_identity)
+
+    assert result.pulled == 1
+    row = tmp_db.execute("SELECT * FROM known_gateways WHERE agent_pubkey = ?", ("beef" * 16,)).fetchone()
+    assert row is not None
+    assert row["url"] == "https://remote-gw.example.com"
+
+
+def test_pull_gateway_announcements_updates_existing(tmp_db, tmp_identity):
+    """pull_gateway_announcements should update existing gateway entries."""
+    import json, time
+    from unittest.mock import patch, MagicMock
+    from lightning_memory.sync import pull_gateway_announcements
+
+    now = time.time()
+    tmp_db.execute(
+        "INSERT INTO known_gateways (agent_pubkey, url, operations, relays, last_seen, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        ("beef" * 16, "https://old-url.com", "{}", "[]", now, now),
+    )
+    tmp_db.commit()
+
+    fake_event = {
+        "id": "def456" * 10 + "defg",
+        "kind": 30078,
+        "pubkey": "beef" * 16,
+        "created_at": 1700000000,
+        "tags": [["d", "gateway:" + "beef" * 16], ["type", "gateway"]],
+        "content": json.dumps({
+            "url": "https://new-url.com",
+            "operations": {"memory_query": 5},
+            "relays": [],
+            "version": "0.6.0",
+        }),
+    }
+    mock_resp = MagicMock(success=True, events=[fake_event])
+    with patch("lightning_memory.sync.fetch_from_relays", return_value=[mock_resp]):
+        result = pull_gateway_announcements(tmp_db, tmp_identity)
+
+    assert result.pulled == 1
+    row = tmp_db.execute("SELECT * FROM known_gateways WHERE agent_pubkey = ?", ("beef" * 16,)).fetchone()
+    assert row["url"] == "https://new-url.com"
