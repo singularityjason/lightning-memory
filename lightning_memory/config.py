@@ -45,6 +45,9 @@ class Config:
     phoenixd_url: str = "http://localhost:9740"
     phoenixd_password: str = ""
     pricing: dict[str, int] = field(default_factory=lambda: dict(DEFAULT_PRICING))
+    # Trust attestation settings
+    auto_attest_threshold: int = 5  # publish attestation every N txns per vendor (0=disable)
+    broad_attestation_pull: bool = False  # pull attestations for all vendors, not just local
 
     def to_dict(self) -> dict:
         return {
@@ -57,6 +60,8 @@ class Config:
             "phoenixd_url": self.phoenixd_url,
             "phoenixd_password": self.phoenixd_password,
             "pricing": self.pricing,
+            "auto_attest_threshold": self.auto_attest_threshold,
+            "broad_attestation_pull": self.broad_attestation_pull,
         }
 
     def save(self, path: Path | None = None) -> None:
@@ -89,6 +94,8 @@ def load_config(path: Path | None = None) -> Config:
                 phoenixd_url=data.get("phoenixd_url", "http://localhost:9740"),
                 phoenixd_password=data.get("phoenixd_password", ""),
                 pricing=data.get("pricing", dict(DEFAULT_PRICING)),
+                auto_attest_threshold=data.get("auto_attest_threshold", 5),
+                broad_attestation_pull=data.get("broad_attestation_pull", False),
             )
         except (json.JSONDecodeError, KeyError):
             _cached = Config()

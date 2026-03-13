@@ -65,3 +65,11 @@ class TestConfig:
         cfg1 = load_config(config_path)
         cfg2 = load_config(config_path)
         assert cfg1 is cfg2  # same object from cache
+
+
+def test_config_has_attestation_fields():
+    """Config should have auto_attest_threshold and broad_attestation_pull."""
+    from lightning_memory.config import Config
+    c = Config()
+    assert c.auto_attest_threshold == 5
+    assert c.broad_attestation_pull is False
