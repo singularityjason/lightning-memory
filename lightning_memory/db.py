@@ -96,6 +96,16 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
         );
 
         CREATE INDEX IF NOT EXISTS idx_auth_vendor ON auth_sessions(vendor);
+
+        CREATE TABLE IF NOT EXISTS known_gateways (
+            agent_pubkey TEXT PRIMARY KEY,
+            url TEXT NOT NULL,
+            operations TEXT DEFAULT '{}',
+            relays TEXT DEFAULT '[]',
+            nostr_event_id TEXT,
+            last_seen REAL NOT NULL,
+            created_at REAL NOT NULL
+        );
     """)
 
     # FTS5 virtual table for full-text search

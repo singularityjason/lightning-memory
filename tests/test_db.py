@@ -64,6 +64,29 @@ def test_auth_sessions_table_exists(tmp_db):
     assert "auth_sessions" in tables
 
 
+def test_known_gateways_table_exists(tmp_db):
+    """known_gateways table should be created by schema init."""
+    row = tmp_db.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='known_gateways'"
+    ).fetchone()
+    assert row is not None
+
+
+def test_known_gateways_crud(tmp_db):
+    """Basic insert/query on known_gateways."""
+    import time, json
+    now = time.time()
+    tmp_db.execute(
+        "INSERT INTO known_gateways (agent_pubkey, url, operations, relays, last_seen, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        ("abcd" * 16, "https://gw.example.com", json.dumps({"memory_query": 2}), "[]", now, now),
+    )
+    tmp_db.commit()
+    row = tmp_db.execute("SELECT * FROM known_gateways WHERE agent_pubkey = ?", ("abcd" * 16,)).fetchone()
+    assert row is not None
+    assert row["url"] == "https://gw.example.com"
+
+
 class TestStore:
     def test_store_basic(self, tmp_db):
         result = store_memory(tmp_db, "id1", "hello world")
