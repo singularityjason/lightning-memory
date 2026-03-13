@@ -168,3 +168,76 @@ def test_auto_attestation_disabled(engine):
             )
 
     mock_push.assert_not_called()
+
+
+def test_ln_agent_attest(engine):
+    import lightning_memory.server as srv
+    srv._engine = engine
+    result = srv.ln_agent_attest(
+        agent_pubkey="abcd1234" * 8, owner_id="jason@e1.ai",
+        jurisdiction="US", compliance_level="self_declared", source="manual",
+    )
+    assert result["status"] == "stored"
+    assert result["compliance_level"] == "self_declared"
+
+
+def test_ln_agent_attest_invalid_compliance_level(engine):
+    import lightning_memory.server as srv
+    srv._engine = engine
+    result = srv.ln_agent_attest(agent_pubkey="abcd1234" * 8, compliance_level="invalid")
+    assert "error" in result
+
+
+def test_ln_agent_verify_found(engine):
+    import lightning_memory.server as srv
+    srv._engine = engine
+    srv.ln_agent_attest(agent_pubkey="beef" * 16, jurisdiction="EU", compliance_level="kyc_verified")
+    result = srv.ln_agent_verify(agent_pubkey="beef" * 16)
+    assert result["status"] == "verified"
+    assert result["compliance_level"] == "kyc_verified"
+
+
+def test_ln_agent_verify_not_found(engine):
+    import lightning_memory.server as srv
+    srv._engine = engine
+    result = srv.ln_agent_verify(agent_pubkey="dead" * 16)
+    assert result["status"] == "unknown"
+
+
+def test_ln_auth_session_store(engine):
+    import lightning_memory.server as srv
+    srv._engine = engine
+    result = srv.ln_auth_session(vendor="bitrefill.com", linking_key="02abc123def456" * 4)
+    assert result["status"] == "stored"
+    assert result["session_state"] == "active"
+
+
+def test_ln_auth_session_update(engine):
+    import lightning_memory.server as srv
+    srv._engine = engine
+    srv.ln_auth_session(vendor="bitrefill.com", linking_key="key1")
+    result = srv.ln_auth_session(vendor="bitrefill.com", linking_key="key1", session_state="expired")
+    assert result["session_state"] == "expired"
+
+
+def test_ln_auth_session_invalid_state(engine):
+    import lightning_memory.server as srv
+    srv._engine = engine
+    result = srv.ln_auth_session(vendor="x.com", linking_key="k", session_state="bogus")
+    assert "error" in result
+
+
+def test_ln_auth_lookup_found(engine):
+    import lightning_memory.server as srv
+    srv._engine = engine
+    srv.ln_auth_session(vendor="bitrefill.com", linking_key="key123")
+    result = srv.ln_auth_lookup(vendor="bitrefill.com")
+    assert result["has_session"] is True
+    assert result["linking_key"] == "key123"
+
+
+def test_ln_auth_lookup_not_found(engine):
+    import lightning_memory.server as srv
+    srv._engine = engine
+    result = srv.ln_auth_lookup(vendor="unknown.com")
+    assert result["has_session"] is False

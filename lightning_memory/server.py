@@ -501,6 +501,174 @@ def ln_trust_attest(
     }
 
 
+_VALID_COMPLIANCE_LEVELS = {"unknown", "self_declared", "kyc_verified", "regulated_entity"}
+
+
+@mcp.tool()
+def ln_agent_attest(
+    agent_pubkey: str,
+    owner_id: str = "",
+    jurisdiction: str = "",
+    compliance_level: str = "self_declared",
+    source: str = "",
+) -> dict:
+    """Store an attestation about an agent's identity and compliance status.
+
+    Used for Know Your Agent (KYA) — agents self-attesting, operators
+    attesting their agents, or third-party KYA providers.
+
+    Args:
+        agent_pubkey: The agent's Nostr public key (64 hex chars).
+        owner_id: Owner identifier (email, company name, etc.).
+        jurisdiction: Legal jurisdiction (e.g., "US", "EU", "SG").
+        compliance_level: One of: unknown, self_declared, kyc_verified, regulated_entity.
+        source: Verification source (e.g., "manual", "sumsub", "trulioo").
+
+    Returns:
+        The stored attestation record.
+    """
+    import time
+
+    if compliance_level not in _VALID_COMPLIANCE_LEVELS:
+        return {"error": f"Invalid compliance_level: {compliance_level}. Must be one of: {', '.join(sorted(_VALID_COMPLIANCE_LEVELS))}"}
+
+    engine = _get_engine()
+    now = time.time()
+    engine.conn.execute(
+        """INSERT INTO agent_attestations
+           (agent_pubkey, owner_id, jurisdiction, compliance_level, verification_source, verified_at, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(agent_pubkey) DO UPDATE SET
+               owner_id=excluded.owner_id,
+               jurisdiction=excluded.jurisdiction,
+               compliance_level=excluded.compliance_level,
+               verification_source=excluded.verification_source,
+               verified_at=excluded.verified_at,
+               updated_at=excluded.updated_at""",
+        (agent_pubkey, owner_id, jurisdiction, compliance_level, source, now, now, now),
+    )
+    engine.conn.commit()
+
+    return {
+        "status": "stored",
+        "agent_pubkey": agent_pubkey,
+        "compliance_level": compliance_level,
+        "jurisdiction": jurisdiction,
+    }
+
+
+@mcp.tool()
+def ln_agent_verify(agent_pubkey: str) -> dict:
+    """Look up an agent's compliance attestation.
+
+    Args:
+        agent_pubkey: The agent's Nostr public key to verify.
+
+    Returns:
+        Attestation details or {status: "unknown"} if not found.
+    """
+    engine = _get_engine()
+    row = engine.conn.execute(
+        "SELECT * FROM agent_attestations WHERE agent_pubkey = ?",
+        (agent_pubkey,),
+    ).fetchone()
+
+    if not row:
+        return {"status": "unknown", "agent_pubkey": agent_pubkey}
+
+    return {
+        "status": "verified",
+        "agent_pubkey": row["agent_pubkey"],
+        "owner_id": row["owner_id"],
+        "jurisdiction": row["jurisdiction"],
+        "compliance_level": row["compliance_level"],
+        "verification_source": row["verification_source"],
+        "verified_at": row["verified_at"],
+    }
+
+
+_VALID_SESSION_STATES = {"active", "expired", "revoked"}
+
+
+@mcp.tool()
+def ln_auth_session(
+    vendor: str,
+    linking_key: str,
+    session_state: str = "active",
+) -> dict:
+    """Store or update an LNURL-auth session record.
+
+    Record-keeping for externally-established LNURL-auth sessions.
+
+    Args:
+        vendor: Vendor name or domain.
+        linking_key: The LNURL-auth linking key for this vendor.
+        session_state: Session state: active, expired, or revoked.
+
+    Returns:
+        The stored session record.
+    """
+    import time
+
+    if session_state not in _VALID_SESSION_STATES:
+        return {"error": f"Invalid session_state: {session_state}. Must be one of: {', '.join(sorted(_VALID_SESSION_STATES))}"}
+
+    engine = _get_engine()
+    now = time.time()
+    agent_pubkey = engine.identity.public_key_hex
+
+    engine.conn.execute(
+        """INSERT INTO auth_sessions
+           (vendor, agent_pubkey, linking_key, session_state, last_auth_at, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(vendor, agent_pubkey) DO UPDATE SET
+               linking_key=excluded.linking_key,
+               session_state=excluded.session_state,
+               last_auth_at=excluded.last_auth_at,
+               updated_at=excluded.updated_at""",
+        (vendor, agent_pubkey, linking_key, session_state, now, now, now),
+    )
+    engine.conn.commit()
+
+    return {
+        "status": "stored",
+        "vendor": vendor,
+        "agent_pubkey": agent_pubkey,
+        "linking_key": linking_key,
+        "session_state": session_state,
+    }
+
+
+@mcp.tool()
+def ln_auth_lookup(vendor: str) -> dict:
+    """Check if an LNURL-auth session exists with a vendor.
+
+    Args:
+        vendor: Vendor name or domain to check.
+
+    Returns:
+        Session details if found, or {has_session: false}.
+    """
+    engine = _get_engine()
+    agent_pubkey = engine.identity.public_key_hex
+
+    row = engine.conn.execute(
+        "SELECT * FROM auth_sessions WHERE vendor = ? AND agent_pubkey = ?",
+        (vendor, agent_pubkey),
+    ).fetchone()
+
+    if not row:
+        return {"has_session": False, "vendor": vendor}
+
+    return {
+        "has_session": True,
+        "vendor": row["vendor"],
+        "linking_key": row["linking_key"],
+        "session_state": row["session_state"],
+        "last_auth_at": row["last_auth_at"],
+    }
+
+
 def _cmd_relay_status() -> None:
     """Show connection status for configured Nostr relays."""
     import asyncio
