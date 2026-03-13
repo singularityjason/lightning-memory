@@ -5,6 +5,12 @@ import json
 from lightning_memory import server
 
 
+def test_tool_count():
+    """Server should expose 13 tools."""
+    tools = server.mcp._tool_manager._tools
+    assert len(tools) == 13, f"Expected 13, got {len(tools)}: {list(tools.keys())}"
+
+
 class TestToolRoundTrip:
     """Test the MCP tool functions directly (not through MCP protocol)."""
 

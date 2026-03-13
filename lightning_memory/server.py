@@ -1,11 +1,14 @@
-"""Lightning Memory MCP server: 9 tools for agent memory, intelligence, and sync."""
+"""Lightning Memory MCP server: 13 tools for agent memory, intelligence, and sync."""
 
 from __future__ import annotations
 
 from mcp.server.fastmcp import FastMCP
 
+from .budget import BudgetEngine
 from .intelligence import IntelligenceEngine
 from .memory import MemoryEngine
+from .preflight import PreflightEngine
+from .trust import TrustEngine
 
 mcp = FastMCP(
     "Lightning Memory",
@@ -137,6 +140,18 @@ def memory_list(
 def _get_intelligence() -> IntelligenceEngine:
     engine = _get_engine()
     return IntelligenceEngine(conn=engine.conn)
+
+
+def _get_budget() -> BudgetEngine:
+    return BudgetEngine(conn=_get_engine().conn)
+
+
+def _get_trust() -> TrustEngine:
+    return TrustEngine(conn=_get_engine().conn)
+
+
+def _get_preflight() -> PreflightEngine:
+    return PreflightEngine(conn=_get_engine().conn)
 
 
 @mcp.tool()
@@ -296,6 +311,108 @@ def ln_budget_status() -> dict:
         "total_payments": len(payments),
         "by_operation": by_operation,
     }
+
+
+@mcp.tool()
+def ln_budget_set(
+    vendor: str,
+    max_sats_per_txn: int | None = None,
+    max_sats_per_day: int | None = None,
+    max_sats_per_month: int | None = None,
+) -> dict:
+    """Set spending limits for a vendor.
+
+    Creates budget rules that the pre-flight gate enforces.
+    Any payment exceeding these limits will be rejected.
+
+    Args:
+        vendor: Vendor name or domain (e.g., "bitrefill.com").
+        max_sats_per_txn: Maximum sats allowed per single transaction.
+        max_sats_per_day: Maximum total sats per day to this vendor.
+        max_sats_per_month: Maximum total sats per month to this vendor.
+
+    Returns:
+        The created/updated budget rule.
+    """
+    budget = _get_budget()
+    rule = budget.set_rule(
+        vendor, max_sats_per_txn=max_sats_per_txn,
+        max_sats_per_day=max_sats_per_day, max_sats_per_month=max_sats_per_month,
+    )
+    return {"status": "set", "rule": rule.to_dict()}
+
+
+@mcp.tool()
+def ln_budget_check(vendor: str | None = None) -> dict:
+    """List budget rules and current spending status.
+
+    Shows all active budget rules, or details for a specific vendor
+    including how much has been spent today and this month.
+
+    Args:
+        vendor: Optional vendor to check. If omitted, lists all rules.
+
+    Returns:
+        Budget rules with current spending against limits.
+    """
+    budget = _get_budget()
+    if vendor:
+        rule = budget.get_rule(vendor)
+        if not rule:
+            return {"vendor": vendor, "has_rule": False}
+        return {
+            "vendor": vendor,
+            "has_rule": True,
+            "rule": rule.to_dict(),
+            "spent_today": budget.spent_today(vendor),
+        }
+    rules = budget.list_rules()
+    return {
+        "count": len(rules),
+        "rules": [r.to_dict() for r in rules],
+    }
+
+
+@mcp.tool()
+def ln_vendor_trust(vendor: str) -> dict:
+    """Get a vendor's full trust profile.
+
+    Combines KYC verification status, local transaction reputation,
+    and community trust attestations (from Nostr NIP-85) into a
+    unified trust profile.
+
+    Args:
+        vendor: Vendor name or domain.
+
+    Returns:
+        Trust profile: KYC status, jurisdiction, community score,
+        attestation count, and local reputation data.
+    """
+    trust = _get_trust()
+    profile = trust.vendor_trust_profile(vendor)
+    return {"trust": profile.to_dict()}
+
+
+@mcp.tool()
+def ln_preflight(vendor: str, amount_sats: int) -> dict:
+    """Pre-flight check before making a payment.
+
+    Runs budget limits, anomaly detection, and trust verification
+    to produce an approve/reject/escalate decision. Use this before
+    every payment to catch overspending, price anomalies, and
+    unverified vendors.
+
+    Args:
+        vendor: Vendor name or domain.
+        amount_sats: Proposed payment amount in satoshis.
+
+    Returns:
+        Decision: verdict (approve/reject/escalate), reasons,
+        budget remaining, anomaly status, and trust score.
+    """
+    pf = _get_preflight()
+    decision = pf.check(vendor, amount_sats)
+    return {"decision": decision.to_dict()}
 
 
 def _cmd_relay_status() -> None:
