@@ -73,3 +73,14 @@ def test_config_has_attestation_fields():
     c = Config()
     assert c.auto_attest_threshold == 5
     assert c.broad_attestation_pull is False
+
+
+def test_gateway_discovery_config_defaults():
+    """Config should have gateway_discovery and gateway_url defaults."""
+    from lightning_memory.config import Config
+    c = Config()
+    assert c.gateway_discovery is False
+    assert c.gateway_url == ""
+    d = c.to_dict()
+    assert "gateway_discovery" in d
+    assert "gateway_url" in d

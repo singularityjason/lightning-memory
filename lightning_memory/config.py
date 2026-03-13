@@ -49,6 +49,9 @@ class Config:
     # Trust attestation settings
     auto_attest_threshold: int = 5  # publish attestation every N txns per vendor (0=disable)
     broad_attestation_pull: bool = False  # pull attestations for all vendors, not just local
+    # Gateway marketplace settings
+    gateway_discovery: bool = False  # enable gateway announcement sync during memory_sync
+    gateway_url: str = ""  # this gateway's public URL (for announcements)
 
     def to_dict(self) -> dict:
         return {
@@ -63,6 +66,8 @@ class Config:
             "pricing": self.pricing,
             "auto_attest_threshold": self.auto_attest_threshold,
             "broad_attestation_pull": self.broad_attestation_pull,
+            "gateway_discovery": self.gateway_discovery,
+            "gateway_url": self.gateway_url,
         }
 
     def save(self, path: Path | None = None) -> None:
@@ -97,6 +102,8 @@ def load_config(path: Path | None = None) -> Config:
                 pricing=data.get("pricing", dict(DEFAULT_PRICING)),
                 auto_attest_threshold=data.get("auto_attest_threshold", 5),
                 broad_attestation_pull=data.get("broad_attestation_pull", False),
+                gateway_discovery=data.get("gateway_discovery", False),
+                gateway_url=data.get("gateway_url", ""),
             )
         except (json.JSONDecodeError, KeyError):
             _cached = Config()
