@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from lightning_memory.db import get_connection, store_memory
-from lightning_memory.nostr import NostrIdentity
+from lightning_memory.nostr import NIP85_KIND, NostrIdentity
 from lightning_memory.relay import RelayResponse
 from lightning_memory.sync import (
     SyncResult,
@@ -200,3 +200,151 @@ class TestHelpers:
         assert d["pushed"] == 3
         assert d["pulled"] == 5
         assert d["errors"] == ["err1"]
+
+
+class TestPullTrustAssertions:
+    def test_pull_stores_attestations(self, sync_db, signing_identity):
+        """Pulled NIP-85 events should be stored as attestation memories."""
+        from lightning_memory.sync import pull_trust_assertions
+
+        # First store a transaction so there's a known vendor
+        store_memory(sync_db, "txn1", "Paid bitrefill", memory_type="transaction",
+                     metadata={"vendor": "bitrefill.com", "amount_sats": 100})
+
+        # Create a trust assertion event from a different "remote" identity
+        remote = NostrIdentity.generate()
+        event = remote.create_trust_assertion_event(
+            vendor="bitrefill.com", score=0.9, basis="test", sign=remote.has_signing
+        )
+        # If can't sign, add a dummy sig for the test
+        if "sig" not in event:
+            event["sig"] = "0" * 128
+
+        resp = RelayResponse(relay="wss://test", success=True, events=[event])
+
+        with patch("lightning_memory.sync.fetch_from_relays", new_callable=AsyncMock) as mock_fetch:
+            mock_fetch.return_value = [resp]
+            with patch("lightning_memory.sync.load_config") as mock_cfg:
+                mock_cfg.return_value.relays = ["wss://test"]
+                mock_cfg.return_value.sync_timeout_seconds = 5
+                mock_cfg.return_value.max_events_per_sync = 100
+                result = pull_trust_assertions(sync_db, signing_identity)
+
+        assert result.pulled == 1
+
+        # Verify stored as attestation
+        row = sync_db.execute(
+            "SELECT type, metadata FROM memories WHERE nostr_event_id = ?", (event["id"],)
+        ).fetchone()
+        assert row is not None
+        assert row["type"] == "attestation"
+        meta = json.loads(row["metadata"])
+        assert meta["vendor"] == "bitrefill.com"
+        assert meta["trust_score"] == 0.9
+
+    def test_pull_rejects_out_of_range_score(self, sync_db, signing_identity):
+        """Events with score > 1.0 should be skipped."""
+        from lightning_memory.sync import pull_trust_assertions
+        import hashlib
+
+        # Store a transaction so vendor exists
+        store_memory(sync_db, "txn2", "Paid bad.com", memory_type="transaction",
+                     metadata={"vendor": "bad.com"})
+
+        # Manually craft event with bad score
+        remote = NostrIdentity.generate()
+        content = json.dumps({"vendor": "bad.com", "score": 5.0, "basis": "fake"})
+        tags = [["d", "trust:bad.com"]]
+        event = {
+            "kind": NIP85_KIND,
+            "pubkey": remote.public_key_hex,
+            "created_at": 1710000000,
+            "tags": tags,
+            "content": content,
+        }
+        serialized = json.dumps(
+            [0, event["pubkey"], event["created_at"], event["kind"],
+             event["tags"], event["content"]],
+            separators=(",", ":"), ensure_ascii=False,
+        )
+        event["id"] = hashlib.sha256(serialized.encode()).hexdigest()
+        event["sig"] = "0" * 128
+
+        resp = RelayResponse(relay="wss://test", success=True, events=[event])
+
+        with patch("lightning_memory.sync.fetch_from_relays", new_callable=AsyncMock) as mock_fetch:
+            mock_fetch.return_value = [resp]
+            with patch("lightning_memory.sync.load_config") as mock_cfg:
+                mock_cfg.return_value.relays = ["wss://test"]
+                mock_cfg.return_value.sync_timeout_seconds = 5
+                mock_cfg.return_value.max_events_per_sync = 100
+                result = pull_trust_assertions(sync_db, signing_identity)
+
+        assert result.pulled == 0
+
+    def test_pull_deduplicates(self, sync_db, signing_identity):
+        """Same event from multiple relays should be stored once."""
+        from lightning_memory.sync import pull_trust_assertions
+
+        # Store transaction for vendor
+        store_memory(sync_db, "txn3", "Paid v.com", memory_type="transaction",
+                     metadata={"vendor": "v.com"})
+
+        remote = NostrIdentity.generate()
+        event = remote.create_trust_assertion_event("v.com", 0.8, sign=remote.has_signing)
+        if "sig" not in event:
+            event["sig"] = "0" * 128
+
+        resp1 = RelayResponse(relay="wss://r1", success=True, events=[event])
+        resp2 = RelayResponse(relay="wss://r2", success=True, events=[event])
+
+        with patch("lightning_memory.sync.fetch_from_relays", new_callable=AsyncMock) as mock_fetch:
+            mock_fetch.return_value = [resp1, resp2]
+            with patch("lightning_memory.sync.load_config") as mock_cfg:
+                mock_cfg.return_value.relays = ["wss://r1", "wss://r2"]
+                mock_cfg.return_value.sync_timeout_seconds = 5
+                mock_cfg.return_value.max_events_per_sync = 100
+                result = pull_trust_assertions(sync_db, signing_identity)
+
+        assert result.pulled == 1
+
+
+class TestPushTrustAssertion:
+    def test_push_succeeds(self, sync_db, signing_identity):
+        """Should create and publish a NIP-85 event."""
+        from lightning_memory.sync import push_trust_assertion
+
+        ok = RelayResponse(relay="wss://test", success=True)
+        with patch("lightning_memory.sync.publish_to_relays", new_callable=AsyncMock) as mock_pub:
+            mock_pub.return_value = [ok]
+            with patch("lightning_memory.sync.load_config") as mock_cfg:
+                mock_cfg.return_value.relays = ["wss://test"]
+                mock_cfg.return_value.sync_timeout_seconds = 5
+                result = push_trust_assertion(
+                    sync_db, signing_identity, "bitrefill.com", 0.9, "transaction_history"
+                )
+
+        assert result.pushed == 1
+        assert result.errors == []
+
+        # Verify locally stored attestation
+        row = sync_db.execute(
+            "SELECT type, metadata FROM memories WHERE type = 'attestation'"
+        ).fetchone()
+        assert row is not None
+        meta = json.loads(row["metadata"])
+        assert meta["vendor"] == "bitrefill.com"
+        assert meta["trust_score"] == 0.9
+
+    def test_push_without_signing(self, sync_db):
+        """Fallback identity can't push."""
+        from lightning_memory.sync import push_trust_assertion
+        import os, hashlib
+        privkey = os.urandom(32)
+        pubkey = hashlib.sha256(privkey).digest()
+        identity = NostrIdentity(private_key=privkey, public_key=pubkey)
+
+        result = push_trust_assertion(sync_db, identity, "x.com", 0.5)
+        assert result.pushed == 0
+        assert len(result.errors) == 1
+        assert "secp256k1" in result.errors[0]

@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .config import load_config
-from .nostr import KIND_NIP78, NostrIdentity
+from .nostr import KIND_NIP78, NIP85_KIND, NostrIdentity, parse_trust_assertion
 from .relay import fetch_from_relays, publish_to_relays
 
 
@@ -217,6 +217,154 @@ def pull_memories(
 
     if latest_ts > 0:
         _set_cursor(conn, "last_pull_timestamp", str(latest_ts))
+
+    return result
+
+
+def pull_trust_assertions(
+    conn: sqlite3.Connection,
+    identity: NostrIdentity,
+) -> SyncResult:
+    """Pull NIP-85 trust assertion events from relays.
+
+    Fetches kind 30382 events for vendors in local transaction history.
+    Stores valid assertions as memories with type='attestation'.
+    Rejects scores outside 0.0-1.0 range.
+    """
+    _ensure_sync_schema(conn)
+    config = load_config()
+    result = SyncResult()
+
+    # Get vendors from local transaction history
+    rows = conn.execute(
+        "SELECT DISTINCT metadata FROM memories WHERE type = 'transaction'"
+    ).fetchall()
+    vendors: set[str] = set()
+    for row in rows:
+        meta = json.loads(row["metadata"]) if row["metadata"] else {}
+        v = meta.get("vendor", "")
+        if v:
+            vendors.add(v.lower())
+
+    if not vendors:
+        return result
+
+    # Query relays for trust assertions about known vendors
+    all_events: list[dict] = []
+    seen_ids: set[str] = set()
+
+    for vendor in vendors:
+        filters: dict[str, Any] = {
+            "kinds": [NIP85_KIND],
+            "#d": [f"trust:{vendor}"],
+            "limit": 50,
+        }
+        try:
+            responses = asyncio.run(
+                fetch_from_relays(config.relays, filters, config.sync_timeout_seconds)
+            )
+        except Exception as e:
+            result.errors.append(f"Fetch failed for {vendor}: {e}")
+            continue
+
+        for resp in responses:
+            if not resp.success:
+                result.errors.append(f"{resp.relay}: {resp.message}")
+                continue
+            for event in resp.events:
+                eid = event.get("id", "")
+                if eid and eid not in seen_ids:
+                    seen_ids.add(eid)
+                    all_events.append(event)
+
+    # Import valid attestations
+    for event in all_events:
+        # Skip if already stored
+        existing = conn.execute(
+            "SELECT id FROM memories WHERE nostr_event_id = ?", (event["id"],)
+        ).fetchone()
+        if existing:
+            continue
+
+        # Parse and validate
+        parsed = parse_trust_assertion(event)
+        if parsed is None:
+            continue  # Invalid or out-of-range score
+
+        from .db import store_memory
+        store_memory(
+            conn,
+            memory_id=f"att_{event['id'][:12]}",
+            content=f"Trust attestation for {parsed['vendor']}: score {parsed['trust_score']}",
+            memory_type="attestation",
+            metadata={
+                "vendor": parsed["vendor"],
+                "trust_score": parsed["trust_score"],
+                "attester": parsed["attester"],
+                "basis": parsed["basis"],
+            },
+            nostr_event_id=event["id"],
+        )
+        result.pulled += 1
+
+    return result
+
+
+def push_trust_assertion(
+    conn: sqlite3.Connection,
+    identity: NostrIdentity,
+    vendor: str,
+    score: float,
+    basis: str = "transaction_history",
+) -> SyncResult:
+    """Create and publish a NIP-85 trust assertion to relays.
+
+    Also stores the attestation locally as a memory.
+    Requires secp256k1 for signing.
+    """
+    _ensure_sync_schema(conn)
+    config = load_config()
+    result = SyncResult()
+
+    if not identity.has_signing:
+        result.errors.append(
+            "Cannot push: secp256k1 not available. "
+            "Install with: pip install lightning-memory[sync]"
+        )
+        return result
+
+    event = identity.create_trust_assertion_event(
+        vendor=vendor, score=score, basis=basis, sign=True,
+    )
+
+    try:
+        responses = asyncio.run(
+            publish_to_relays(config.relays, event, config.sync_timeout_seconds)
+        )
+        success_count = sum(1 for r in responses if r.success)
+        if success_count > 0:
+            result.pushed = 1
+        else:
+            errors = [f"{r.relay}: {r.message}" for r in responses if not r.success]
+            result.errors.extend(errors)
+    except Exception as e:
+        result.errors.append(f"Push failed: {e}")
+
+    # Store locally regardless of push success
+    from .db import store_memory
+    store_memory(
+        conn,
+        memory_id=f"att_{event['id'][:12]}",
+        content=f"Trust attestation for {vendor}: score {score}",
+        memory_type="attestation",
+        metadata={
+            "vendor": vendor,
+            "trust_score": score,
+            "attester": identity.public_key_hex,
+            "basis": basis,
+        },
+        nostr_event_id=event["id"],
+    )
 
     return result
 
