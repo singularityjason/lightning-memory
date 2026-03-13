@@ -255,9 +255,31 @@ ln_compliance_report(since="30d")
 # → {report: {agent_identity: {...}, transactions: [...], budget_rules: [...], vendor_kyc: [...], ...}}
 ```
 
+### `ln_discover_gateways`
+
+List known Lightning Memory gateways discovered via Nostr relays.
+
+```
+ln_discover_gateways(operation="memory_query")
+# → {count: 2, gateways: [{url: "https://gw1.example.com", operations: {...}}, ...]}
+```
+
+### `ln_remote_query`
+
+Query a remote gateway via L402 micropayment. Pays automatically via Phoenixd.
+
+```
+ln_remote_query(
+  gateway_url="https://gw.example.com",
+  operation="memory_query",
+  params='{"query": "openai rate limits"}'
+)
+# → {status: "success", data: {count: 3, memories: [...]}}
+```
+
 ### `memory_sync`
 
-Sync memories with Nostr relays (push and/or pull). Also pulls NIP-85 trust assertions for vendors in local transaction history.
+Sync memories with Nostr relays (push and/or pull). Also pulls NIP-85 trust assertions and gateway announcements.
 
 ```
 memory_sync(direction="both")  # "push", "pull", or "both"
@@ -397,6 +419,14 @@ lightning-memory relay-status
 # Memories pushed: 42
 ```
 
+### `lightning-memory-manifest`
+
+Generate a `.well-known/lightning-memory.json` manifest for DNS-based gateway discovery:
+
+```bash
+lightning-memory-manifest > .well-known/lightning-memory.json
+```
+
 ## How It Works
 
 1. **First run**: A Nostr keypair is generated and stored at `~/.lightning-memory/keys/`
@@ -425,6 +455,7 @@ All data is stored locally:
 - [x] Phase 5: Compliance & trust layer (budget enforcement, vendor KYC, community reputation, payment pre-flight gate)
 - [x] Phase 5.1: Community reputation — live NIP-85 trust attestation sync
 - [x] Phase 5.2: Compliance integration — KYA attestations, LNURL-auth sessions, compliance reports
+- [x] Phase 6: Memory marketplace — gateway discovery (Nostr + DNS), remote L402 queries, gateway client
 
 ## Star History
 

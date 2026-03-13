@@ -1,4 +1,4 @@
-"""Lightning Memory MCP server: 19 tools for agent memory, intelligence, and sync."""
+"""Lightning Memory MCP server: 21 tools for agent memory, intelligence, and sync."""
 
 from __future__ import annotations
 

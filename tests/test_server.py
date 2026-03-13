@@ -6,9 +6,9 @@ from lightning_memory import server
 
 
 def test_tool_count():
-    """Server should expose 19 tools."""
+    """Server should expose 21 tools."""
     tools = server.mcp._tool_manager._tools
-    assert len(tools) == 19, f"Expected 19, got {len(tools)}: {list(tools.keys())}"
+    assert len(tools) == 21, f"Expected 21, got {len(tools)}: {list(tools.keys())}"
 
 
 class TestToolRoundTrip:
