@@ -109,3 +109,49 @@ class TestNIP78Event:
         )
         expected_id = hashlib.sha256(serialized.encode()).hexdigest()
         assert event["id"] == expected_id
+
+
+from lightning_memory.nostr import NIP85_KIND, parse_trust_assertion
+
+
+def test_nip85_kind_constant():
+    assert NIP85_KIND == 30382
+
+
+def test_parse_trust_assertion():
+    """Parse a NIP-85 Trusted Assertion event into vendor trust data."""
+    event = {
+        "kind": 30382,
+        "content": '{"score": 0.89, "vendor": "bitrefill.com", "basis": "transaction_history"}',
+        "tags": [
+            ["d", "trust:bitrefill.com"],
+            ["p", "target_pubkey_hex"],
+        ],
+        "pubkey": "attester_pubkey_hex",
+        "created_at": 1710000000,
+    }
+    result = parse_trust_assertion(event)
+    assert result is not None
+    assert result["vendor"] == "bitrefill.com"
+    assert result["trust_score"] == 0.89
+    assert result["attester"] == "attester_pubkey_hex"
+
+
+def test_parse_trust_assertion_wrong_kind():
+    """Wrong kind returns None."""
+    result = parse_trust_assertion({"kind": 1, "content": '{"score": 0.5, "vendor": "x"}'})
+    assert result is None
+
+
+def test_parse_trust_assertion_missing_fields():
+    """Missing vendor or score returns None."""
+    result = parse_trust_assertion({"kind": 30382, "content": '{"vendor": "x"}'})
+    assert result is None
+    result = parse_trust_assertion({"kind": 30382, "content": '{"score": 0.5}'})
+    assert result is None
+
+
+def test_parse_trust_assertion_bad_json():
+    """Bad JSON content returns None."""
+    result = parse_trust_assertion({"kind": 30382, "content": "not json"})
+    assert result is None

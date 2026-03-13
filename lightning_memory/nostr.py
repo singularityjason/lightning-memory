@@ -19,6 +19,36 @@ KEYS_DIR = Path.home() / ".lightning-memory" / "keys"
 # NIP-78 kind for addressable events (application-specific data)
 KIND_NIP78 = 30078
 
+NIP85_KIND = 30382  # NIP-85 Trusted Assertions
+
+
+def parse_trust_assertion(event: dict) -> dict | None:
+    """Parse a NIP-85 Trusted Assertion event.
+
+    Returns dict with vendor, trust_score, attester, timestamp
+    or None if the event is not a valid trust assertion.
+    """
+    if event.get("kind") != NIP85_KIND:
+        return None
+
+    try:
+        content = json.loads(event.get("content", "{}"))
+    except (json.JSONDecodeError, TypeError):
+        return None
+
+    vendor = content.get("vendor")
+    score = content.get("score")
+    if vendor is None or score is None:
+        return None
+
+    return {
+        "vendor": vendor,
+        "trust_score": float(score),
+        "attester": event.get("pubkey", ""),
+        "basis": content.get("basis", ""),
+        "timestamp": event.get("created_at", 0),
+    }
+
 
 @dataclass
 class NostrIdentity:
