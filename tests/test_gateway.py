@@ -357,3 +357,13 @@ class TestNewRoutes:
         """GET /ln/compliance-report should return 402 without auth."""
         resp = gateway_client.get("/ln/compliance-report")
         assert resp.status_code == 402
+
+
+def test_info_includes_discovery_section(gateway_client):
+    """GET /info should include discovery section."""
+    response = gateway_client.get("/info")
+    assert response.status_code == 200
+    data = response.json()
+    assert "discovery" in data
+    assert "agent_pubkey" in data["discovery"]
+    assert "relays" in data["discovery"]

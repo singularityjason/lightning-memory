@@ -230,7 +230,7 @@ async def _create_challenge(operation: str, price_sats: int) -> l402.L402Challen
 
 
 async def info(request: Request) -> JSONResponse:
-    """Gateway status, pricing, and node info (free)."""
+    """Gateway status, pricing, node info, and discovery metadata (free)."""
     engine = _get_engine()
     stats = engine.stats()
     config = load_config()
@@ -240,6 +240,10 @@ async def info(request: Request) -> JSONResponse:
         "pricing": config.pricing,
         "agent_pubkey": stats["agent_pubkey"],
         "total_memories": stats["total"],
+        "discovery": {
+            "agent_pubkey": stats["agent_pubkey"],
+            "relays": config.relays,
+        },
     })
 
 

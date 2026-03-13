@@ -45,6 +45,7 @@ Issues = "https://github.com/singularityjason/lightning-memory/issues"
 [project.scripts]
 lightning-memory = "lightning_memory.server:main"
 lightning-memory-gateway = "lightning_memory.gateway:main"
+lightning-memory-manifest = "lightning_memory.server:gateway_manifest_main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["lightning_memory"]

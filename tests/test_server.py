@@ -364,3 +364,75 @@ def test_ln_remote_query_logs_transaction(engine):
     assert len(memories) >= 1
     found = any("L402" in m["content"] for m in memories)
     assert found
+
+
+def test_memory_sync_pulls_gateway_announcements(engine):
+    """memory_sync should pull gateway announcements when gateway_discovery is enabled."""
+    import lightning_memory.server as srv
+    srv._engine = engine
+
+    from unittest.mock import patch, MagicMock
+    from lightning_memory.sync import SyncResult
+
+    mock_pull = MagicMock(return_value=SyncResult(pulled=0))
+    mock_pull_ta = MagicMock(return_value=SyncResult(pulled=0))
+    mock_pull_gw = MagicMock(return_value=SyncResult(pulled=3))
+
+    with patch("lightning_memory.sync.pull_memories", mock_pull), \
+         patch("lightning_memory.sync.pull_trust_assertions", mock_pull_ta), \
+         patch("lightning_memory.sync.pull_gateway_announcements", mock_pull_gw), \
+         patch("lightning_memory.server.load_config") as mock_cfg:
+        mock_cfg.return_value.gateway_discovery = True
+        mock_cfg.return_value.gateway_url = ""
+        result = srv.memory_sync(direction="pull")
+
+    mock_pull_gw.assert_called_once()
+    assert result["pulled"] == 3
+
+
+def test_memory_sync_pushes_gateway_announcement(engine):
+    """memory_sync should push gateway announcement when gateway_url is set."""
+    import lightning_memory.server as srv
+    srv._engine = engine
+
+    from unittest.mock import patch, MagicMock
+    from lightning_memory.sync import SyncResult
+
+    mock_push = MagicMock(return_value=SyncResult(pushed=0))
+    mock_push_gw = MagicMock(return_value=SyncResult(pushed=1))
+
+    with patch("lightning_memory.sync.push_memories", mock_push), \
+         patch("lightning_memory.sync.push_gateway_announcement", mock_push_gw), \
+         patch("lightning_memory.server.load_config") as mock_cfg:
+        mock_cfg.return_value.gateway_discovery = True
+        mock_cfg.return_value.gateway_url = "https://my-gw.example.com"
+        result = srv.memory_sync(direction="push")
+
+    mock_push_gw.assert_called_once()
+    assert result["pushed"] == 1
+
+
+def test_generate_gateway_manifest():
+    """generate_gateway_manifest should produce well-known JSON."""
+    from lightning_memory.db import get_connection
+    from lightning_memory.memory import MemoryEngine
+    from lightning_memory.nostr import NostrIdentity
+
+    conn = get_connection(":memory:")
+    identity = NostrIdentity.generate()
+    engine = MemoryEngine(conn=conn, identity=identity)
+
+    import lightning_memory.server as srv
+    srv._engine = engine
+
+    from unittest.mock import patch
+    with patch("lightning_memory.server.load_config") as mock_cfg:
+        mock_cfg.return_value.gateway_url = "https://my-gw.example.com"
+        mock_cfg.return_value.pricing = {"memory_query": 2, "ln_vendor_reputation": 3}
+        mock_cfg.return_value.relays = ["wss://relay.damus.io"]
+        manifest = srv.generate_gateway_manifest()
+
+    assert manifest["gateway_url"] == "https://my-gw.example.com"
+    assert manifest["agent_pubkey"] == identity.public_key_hex
+    assert manifest["operations"] == {"memory_query": 2, "ln_vendor_reputation": 3}
+    assert "version" in manifest
