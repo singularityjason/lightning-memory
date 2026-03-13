@@ -189,9 +189,20 @@ ln_preflight(vendor="bitrefill.com", amount_sats=500)
 # → {decision: {verdict: "approve", budget_remaining_today: 4500, trust_score: 0.89}}
 ```
 
+### `ln_trust_attest`
+
+Publish a trust attestation for a vendor to Nostr relays (NIP-85).
+
+```
+ln_trust_attest(vendor="bitrefill.com")
+# → {status: "attested", vendor: "bitrefill.com", score: 0.85, pushed: 1}
+```
+
+Score is auto-calculated from local reputation if not provided. Other agents pull these attestations via `memory_sync` to build community trust scores.
+
 ### `memory_sync`
 
-Sync memories with Nostr relays (push and/or pull).
+Sync memories with Nostr relays (push and/or pull). Also pulls NIP-85 trust assertions for vendors in local transaction history.
 
 ```
 memory_sync(direction="both")  # "push", "pull", or "both"
@@ -356,6 +367,7 @@ All data is stored locally:
 - [x] Phase 3: Nostr relay sync (NIP-78 events, Schnorr signing, bidirectional sync)
 - [x] Phase 4: L402 payment gateway (macaroons, Phoenixd, Starlette HTTP gateway)
 - [x] Phase 5: Compliance & trust layer (budget enforcement, vendor KYC, community reputation, payment pre-flight gate)
+- [x] Phase 5.1: Community reputation — live NIP-85 trust attestation sync
 
 ## Star History
 
