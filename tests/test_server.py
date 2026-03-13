@@ -6,9 +6,9 @@ from lightning_memory import server
 
 
 def test_tool_count():
-    """Server should expose 13 tools."""
+    """Server should expose 14 tools."""
     tools = server.mcp._tool_manager._tools
-    assert len(tools) == 13, f"Expected 13, got {len(tools)}: {list(tools.keys())}"
+    assert len(tools) == 14, f"Expected 14, got {len(tools)}: {list(tools.keys())}"
 
 
 class TestToolRoundTrip:
@@ -68,3 +68,103 @@ class TestToolRoundTrip:
         result = server.memory_list()
         assert "by_type" in result
         assert result["by_type"]["transaction"] == 1
+
+
+def test_memory_sync_pulls_trust_assertions(engine):
+    """memory_sync should call pull_trust_assertions during pull."""
+    import lightning_memory.server as srv
+    srv._engine = engine
+
+    from unittest.mock import patch, MagicMock
+    from lightning_memory.sync import SyncResult
+
+    mock_pull = MagicMock(return_value=SyncResult(pulled=0))
+    mock_pull_ta = MagicMock(return_value=SyncResult(pulled=2))
+
+    with patch("lightning_memory.sync.pull_memories", mock_pull), \
+         patch("lightning_memory.sync.pull_trust_assertions", mock_pull_ta):
+        result = srv.memory_sync(direction="pull")
+
+    mock_pull_ta.assert_called_once()
+    assert result["pulled"] == 2
+
+
+def test_ln_trust_attest_auto_score(engine):
+    """ln_trust_attest should auto-calculate score from local reputation."""
+    import lightning_memory.server as srv
+    srv._engine = engine
+
+    # Add some transaction history
+    for i in range(5):
+        engine.store(f"Paid 100 sats to vendor.com", "transaction",
+                     {"vendor": "vendor.com", "amount_sats": 100})
+
+    from unittest.mock import patch, MagicMock
+    from lightning_memory.sync import SyncResult
+    mock_push = MagicMock(return_value=SyncResult(pushed=1))
+
+    with patch("lightning_memory.sync.push_trust_assertion", mock_push):
+        result = srv.ln_trust_attest(vendor="vendor.com")
+
+    assert result["status"] == "attested"
+    assert 0.0 <= result["score"] <= 1.0
+    mock_push.assert_called_once()
+
+
+def test_ln_trust_attest_manual_score_validation(engine):
+    """ln_trust_attest should reject scores outside 0.0-1.0."""
+    import lightning_memory.server as srv
+    srv._engine = engine
+
+    result = srv.ln_trust_attest(vendor="x.com", score=1.5)
+    assert result.get("error") is not None
+
+
+def test_auto_attestation_fires(engine):
+    """memory_store should auto-attest after threshold transactions."""
+    import lightning_memory.server as srv
+    srv._engine = engine
+
+    from unittest.mock import patch, MagicMock
+    from lightning_memory.sync import SyncResult
+
+    mock_push = MagicMock(return_value=SyncResult(pushed=1))
+
+    with patch("lightning_memory.sync.push_trust_assertion", mock_push), \
+         patch("lightning_memory.server.load_config") as mock_cfg:
+        mock_cfg.return_value.auto_attest_threshold = 3
+
+        # Store 3 transactions — should trigger on the 3rd
+        for i in range(3):
+            srv.memory_store(
+                content=f"Paid {100+i} sats to vendor.com",
+                type="transaction",
+                metadata='{"vendor": "vendor.com", "amount_sats": 100}',
+            )
+
+    # Should have been called once (on txn #3)
+    assert mock_push.call_count == 1
+
+
+def test_auto_attestation_disabled(engine):
+    """Auto-attestation should not fire when threshold is 0."""
+    import lightning_memory.server as srv
+    srv._engine = engine
+
+    from unittest.mock import patch, MagicMock
+    from lightning_memory.sync import SyncResult
+
+    mock_push = MagicMock(return_value=SyncResult(pushed=1))
+
+    with patch("lightning_memory.sync.push_trust_assertion", mock_push), \
+         patch("lightning_memory.server.load_config") as mock_cfg:
+        mock_cfg.return_value.auto_attest_threshold = 0
+
+        for i in range(5):
+            srv.memory_store(
+                content=f"Paid 100 sats to vendor.com",
+                type="transaction",
+                metadata='{"vendor": "vendor.com", "amount_sats": 100}',
+            )
+
+    mock_push.assert_not_called()

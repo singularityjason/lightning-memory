@@ -1,10 +1,11 @@
-"""Lightning Memory MCP server: 13 tools for agent memory, intelligence, and sync."""
+"""Lightning Memory MCP server: 14 tools for agent memory, intelligence, and sync."""
 
 from __future__ import annotations
 
 from mcp.server.fastmcp import FastMCP
 
 from .budget import BudgetEngine
+from .config import load_config
 from .intelligence import IntelligenceEngine
 from .memory import MemoryEngine
 from .preflight import PreflightEngine
@@ -65,12 +66,41 @@ def memory_store(
     engine = _get_engine()
     meta = json.loads(metadata) if isinstance(metadata, str) else metadata
     result = engine.store(content=content, memory_type=type, metadata=meta)
-    return {
+
+    response = {
         "status": "stored",
         "id": result["id"],
         "type": result["type"],
         "agent_pubkey": engine.identity.public_key_hex,
     }
+
+    # Auto-attestation: publish trust assertion after threshold transactions
+    if type == "transaction" and isinstance(meta, dict) and meta.get("vendor"):
+        _maybe_auto_attest(engine, meta["vendor"])
+
+    return response
+
+
+def _maybe_auto_attest(engine: MemoryEngine, vendor: str) -> None:
+    """Fire auto-attestation if vendor txn count hits threshold."""
+    try:
+        from .sync import push_trust_assertion
+
+        config = load_config()
+        threshold = config.auto_attest_threshold
+        if threshold <= 0:
+            return
+
+        intel = IntelligenceEngine(conn=engine.conn)
+        rep = intel.vendor_report(vendor)
+        if rep.total_txns > 0 and rep.total_txns % threshold == 0:
+            volume_factor = min(rep.total_txns, 20) / 20
+            score = rep.success_rate * volume_factor
+            push_trust_assertion(
+                engine.conn, engine.identity, vendor, score, "auto_attestation",
+            )
+    except Exception:
+        pass  # Fire-and-forget — don't fail the store
 
 
 @mcp.tool()
@@ -233,7 +263,7 @@ def memory_sync(direction: str = "both") -> dict:
     Returns:
         Sync result with counts of pushed/pulled memories and any errors.
     """
-    from .sync import pull_memories, push_memories, SyncResult
+    from .sync import pull_memories, pull_trust_assertions, push_memories, SyncResult
 
     engine = _get_engine()
     combined = SyncResult()
@@ -247,6 +277,11 @@ def memory_sync(direction: str = "both") -> dict:
         pull_result = pull_memories(engine.conn, engine.identity)
         combined.pulled = pull_result.pulled
         combined.errors.extend(pull_result.errors)
+
+        # Also pull trust assertions from relays
+        ta_result = pull_trust_assertions(engine.conn, engine.identity)
+        combined.pulled += ta_result.pulled
+        combined.errors.extend(ta_result.errors)
 
     return {
         "status": "completed",
@@ -413,6 +448,57 @@ def ln_preflight(vendor: str, amount_sats: int) -> dict:
     pf = _get_preflight()
     decision = pf.check(vendor, amount_sats)
     return {"decision": decision.to_dict()}
+
+
+@mcp.tool()
+def ln_trust_attest(
+    vendor: str,
+    score: float | None = None,
+    basis: str = "transaction_history",
+) -> dict:
+    """Publish a trust attestation for a vendor.
+
+    Creates a NIP-85 Trusted Assertion and pushes it to Nostr relays.
+    Other agents can pull these attestations to build community reputation.
+
+    Args:
+        vendor: Vendor name or domain to attest.
+        score: Trust score 0.0-1.0. If omitted, auto-calculated from
+            local reputation (success_rate * volume factor).
+        basis: Reason for the score (default: "transaction_history").
+
+    Returns:
+        Attestation details including score and relay push status.
+    """
+    from .sync import push_trust_assertion
+
+    # Validate manual score
+    if score is not None and (score < 0.0 or score > 1.0):
+        return {"error": f"score must be between 0.0 and 1.0, got {score}"}
+
+    engine = _get_engine()
+
+    # Auto-calculate score if not provided
+    if score is None:
+        intel = _get_intelligence()
+        rep = intel.vendor_report(vendor)
+        if rep.total_txns == 0:
+            return {"error": f"No transaction history with {vendor}. Cannot auto-calculate score."}
+        volume_factor = min(rep.total_txns, 20) / 20
+        score = rep.success_rate * volume_factor
+
+    result = push_trust_assertion(
+        engine.conn, engine.identity, vendor, score, basis,
+    )
+
+    return {
+        "status": "attested",
+        "vendor": vendor,
+        "score": score,
+        "basis": basis,
+        "pushed": result.pushed,
+        "errors": result.errors,
+    }
 
 
 def _cmd_relay_status() -> None:
