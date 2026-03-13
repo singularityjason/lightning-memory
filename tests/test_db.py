@@ -32,6 +32,22 @@ class TestSchema:
         assert "idx_memories_nostr" in indexes
 
 
+def test_budget_rules_table_exists(tmp_db):
+    """Budget rules table should be created by schema init."""
+    row = tmp_db.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='budget_rules'"
+    ).fetchone()
+    assert row is not None, "budget_rules table should exist"
+
+
+def test_vendor_kyc_table_exists(tmp_db):
+    """Vendor KYC table should be created by schema init."""
+    row = tmp_db.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='vendor_kyc'"
+    ).fetchone()
+    assert row is not None, "vendor_kyc table should exist"
+
+
 class TestStore:
     def test_store_basic(self, tmp_db):
         result = store_memory(tmp_db, "id1", "hello world")
