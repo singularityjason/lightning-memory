@@ -182,6 +182,10 @@ def pull_memories(
             eid = event.get("id", "")
             if eid and eid not in seen_ids:
                 seen_ids.add(eid)
+                # Skip events with type tags (KYA, gateway) — not memory events
+                type_tag = _extract_tag(event, "type")
+                if type_tag in ("kya", "gateway"):
+                    continue
                 events.append(event)
 
     # Import events into local DB

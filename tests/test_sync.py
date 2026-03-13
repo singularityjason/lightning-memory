@@ -348,3 +348,36 @@ class TestPushTrustAssertion:
         assert result.pushed == 0
         assert len(result.errors) == 1
         assert "secp256k1" in result.errors[0]
+
+
+def test_pull_skips_kya_events(sync_db, signing_identity):
+    """pull_memories should skip events with type:kya tag."""
+    import hashlib
+
+    event = signing_identity.create_memory_event(
+        "KYA attestation", "general", "kya1", sign=True
+    )
+    # Add type:kya tag
+    event["tags"].append(["type", "kya"])
+    # Recalculate event ID after modifying tags
+    serialized = json.dumps(
+        [0, event["pubkey"], event["created_at"], event["kind"],
+         event["tags"], event["content"]],
+        separators=(",", ":"), ensure_ascii=False,
+    )
+    event["id"] = hashlib.sha256(serialized.encode()).hexdigest()
+    # Re-sign
+    if signing_identity.has_signing:
+        signing_identity.sign_event(event)
+
+    resp = RelayResponse(relay="wss://test", success=True, events=[event])
+
+    with patch("lightning_memory.sync.fetch_from_relays", new_callable=AsyncMock) as mock_fetch:
+        mock_fetch.return_value = [resp]
+        with patch("lightning_memory.sync.load_config") as mock_cfg:
+            mock_cfg.return_value.relays = ["wss://test"]
+            mock_cfg.return_value.sync_timeout_seconds = 5
+            mock_cfg.return_value.max_events_per_sync = 100
+            result = pull_memories(sync_db, signing_identity)
+
+    assert result.pulled == 0  # Skipped due to type:kya tag
