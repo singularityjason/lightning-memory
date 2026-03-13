@@ -211,3 +211,39 @@ def test_create_trust_assertion_event_score_validation(tmp_path):
     identity = NostrIdentity.load_or_create(keys_dir)
     with pytest.raises(ValueError, match="score must be"):
         identity.create_trust_assertion_event("x.com", score=1.5)
+
+
+def test_create_gateway_announcement_event():
+    """Gateway announcement should be kind 30078 with type:gateway tag."""
+    identity = NostrIdentity.generate()
+    event = identity.create_gateway_announcement_event(
+        gateway_url="https://gw.example.com",
+        operations={"memory_query": 2, "ln_vendor_reputation": 3},
+        relays=["wss://relay.damus.io"],
+    )
+    assert event["kind"] == 30078
+    # Check d tag
+    d_tags = [t for t in event["tags"] if t[0] == "d"]
+    assert len(d_tags) == 1
+    assert d_tags[0][1] == f"gateway:{identity.public_key_hex}"
+    # Check type tag
+    type_tags = [t for t in event["tags"] if t[0] == "type"]
+    assert len(type_tags) == 1
+    assert type_tags[0][1] == "gateway"
+    # Check content
+    import json
+    content = json.loads(event["content"])
+    assert content["url"] == "https://gw.example.com"
+    assert content["operations"]["memory_query"] == 2
+    assert "version" in content
+
+
+def test_gateway_announcement_event_has_id():
+    """Gateway announcement event should have a valid SHA256 id."""
+    identity = NostrIdentity.generate()
+    event = identity.create_gateway_announcement_event(
+        gateway_url="https://gw.example.com",
+        operations={"memory_query": 2},
+    )
+    assert "id" in event
+    assert len(event["id"]) == 64

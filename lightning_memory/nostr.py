@@ -242,6 +242,59 @@ class NostrIdentity:
 
         return event
 
+    def create_gateway_announcement_event(
+        self,
+        gateway_url: str,
+        operations: dict[str, int] | None = None,
+        relays: list[str] | None = None,
+        sign: bool = False,
+    ) -> dict:
+        """Create a NIP-78 gateway announcement event (kind 30078).
+
+        Args:
+            gateway_url: Public URL of this gateway.
+            operations: Dict of operation name to price in sats.
+            relays: List of relay URLs this gateway uses.
+            sign: If True and secp256k1 is available, sign the event.
+
+        Returns:
+            dict with Nostr event fields.
+        """
+        now = int(time.time())
+        content = json.dumps({
+            "url": gateway_url,
+            "operations": operations or {},
+            "relays": relays or [],
+            "version": __import__("lightning_memory").__version__,
+        })
+
+        tags = [
+            ["d", f"gateway:{self.public_key_hex}"],
+            ["type", "gateway"],
+            ["client", "lightning-memory"],
+        ]
+
+        event = {
+            "kind": KIND_NIP78,
+            "pubkey": self.public_key_hex,
+            "created_at": now,
+            "tags": tags,
+            "content": content,
+        }
+
+        serialized = json.dumps(
+            [0, event["pubkey"], event["created_at"], event["kind"],
+             event["tags"], event["content"]],
+            separators=(",", ":"),
+            ensure_ascii=False,
+        )
+        event["id"] = hashlib.sha256(serialized.encode()).hexdigest()
+
+        if sign:
+            self.sign_event(event)
+
+        return event
+
     def create_trust_assertion_event(
         self,
         vendor: str,
