@@ -41,9 +41,16 @@ def parse_trust_assertion(event: dict) -> dict | None:
     if vendor is None or score is None:
         return None
 
+    try:
+        score = float(score)
+    except (ValueError, TypeError):
+        return None
+    if score < 0.0 or score > 1.0:
+        return None
+
     return {
         "vendor": vendor,
-        "trust_score": float(score),
+        "trust_score": score,
         "attester": event.get("pubkey", ""),
         "basis": content.get("basis", ""),
         "timestamp": event.get("created_at", 0),

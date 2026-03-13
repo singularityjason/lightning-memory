@@ -2,6 +2,8 @@
 
 import json
 
+import pytest
+
 from lightning_memory.nostr import KIND_NIP78, NostrIdentity
 
 
@@ -155,3 +157,25 @@ def test_parse_trust_assertion_bad_json():
     """Bad JSON content returns None."""
     result = parse_trust_assertion({"kind": 30382, "content": "not json"})
     assert result is None
+
+
+def test_parse_trust_assertion_score_out_of_range_high():
+    """Score > 1.0 should be rejected."""
+    event = {"kind": 30382, "content": '{"score": 1.5, "vendor": "x.com"}', "pubkey": "abc"}
+    result = parse_trust_assertion(event)
+    assert result is None
+
+
+def test_parse_trust_assertion_score_out_of_range_low():
+    """Score < 0.0 should be rejected."""
+    event = {"kind": 30382, "content": '{"score": -0.1, "vendor": "x.com"}', "pubkey": "abc"}
+    result = parse_trust_assertion(event)
+    assert result is None
+
+
+def test_parse_trust_assertion_score_boundary():
+    """Score exactly 0.0 and 1.0 should be accepted."""
+    event_zero = {"kind": 30382, "content": '{"score": 0.0, "vendor": "x.com"}', "pubkey": "abc", "created_at": 1}
+    event_one = {"kind": 30382, "content": '{"score": 1.0, "vendor": "x.com"}', "pubkey": "abc", "created_at": 1}
+    assert parse_trust_assertion(event_zero) is not None
+    assert parse_trust_assertion(event_one) is not None
