@@ -252,3 +252,115 @@ def test_ln_compliance_report(engine):
     assert "report" in result
     assert "agent_identity" in result["report"]
     assert len(result["report"]["transactions"]) == 1
+
+
+def test_ln_discover_gateways_empty(engine):
+    """ln_discover_gateways should return empty list when no gateways known."""
+    import lightning_memory.server as srv
+    srv._engine = engine
+    result = srv.ln_discover_gateways()
+    assert result["count"] == 0
+    assert result["gateways"] == []
+
+
+def test_ln_discover_gateways_with_data(engine):
+    """ln_discover_gateways should return known gateways."""
+    import json, time
+    import lightning_memory.server as srv
+    srv._engine = engine
+
+    now = time.time()
+    engine.conn.execute(
+        "INSERT INTO known_gateways (agent_pubkey, url, operations, relays, last_seen, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        ("abcd" * 16, "https://gw.example.com", json.dumps({"memory_query": 2}), "[]", now, now),
+    )
+    engine.conn.commit()
+
+    result = srv.ln_discover_gateways()
+    assert result["count"] == 1
+    assert result["gateways"][0]["url"] == "https://gw.example.com"
+
+
+def test_ln_discover_gateways_filter_by_operation(engine):
+    """ln_discover_gateways should filter by operation."""
+    import json, time
+    import lightning_memory.server as srv
+    srv._engine = engine
+
+    now = time.time()
+    engine.conn.execute(
+        "INSERT INTO known_gateways (agent_pubkey, url, operations, relays, last_seen, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        ("aaaa" * 16, "https://gw1.example.com", json.dumps({"memory_query": 2}), "[]", now, now),
+    )
+    engine.conn.execute(
+        "INSERT INTO known_gateways (agent_pubkey, url, operations, relays, last_seen, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        ("bbbb" * 16, "https://gw2.example.com", json.dumps({"ln_vendor_reputation": 3}), "[]", now, now),
+    )
+    engine.conn.commit()
+
+    result = srv.ln_discover_gateways(operation="memory_query")
+    assert result["count"] == 1
+    assert result["gateways"][0]["url"] == "https://gw1.example.com"
+
+
+def test_ln_remote_query_success(engine):
+    """ln_remote_query should call GatewayClient and return result."""
+    import lightning_memory.server as srv
+    srv._engine = engine
+
+    from unittest.mock import patch, MagicMock
+    mock_client = MagicMock()
+    mock_client.query.return_value = {"count": 1, "memories": [{"content": "hello"}]}
+
+    with patch("lightning_memory.client.GatewayClient", return_value=mock_client):
+        result = srv.ln_remote_query(
+            gateway_url="https://gw.example.com",
+            operation="memory_query",
+            params='{"query": "test"}',
+        )
+
+    assert result["status"] == "success"
+    assert result["data"]["count"] == 1
+    mock_client.query.assert_called_once_with("memory_query", {"query": "test"})
+
+
+def test_ln_remote_query_invalid_operation(engine):
+    """ln_remote_query should reject invalid operations."""
+    import lightning_memory.server as srv
+    srv._engine = engine
+    result = srv.ln_remote_query(
+        gateway_url="https://gw.example.com",
+        operation="bogus",
+        params="{}",
+    )
+    assert "error" in result
+
+
+def test_ln_remote_query_logs_transaction(engine):
+    """ln_remote_query should log the L402 payment as a transaction memory."""
+    import lightning_memory.server as srv
+    srv._engine = engine
+
+    from unittest.mock import patch, MagicMock
+    mock_client = MagicMock()
+    mock_client.query.return_value = {"count": 0, "memories": []}
+
+    with patch("lightning_memory.client.GatewayClient", return_value=mock_client), \
+         patch("lightning_memory.server.load_config") as mock_cfg:
+        mock_cfg.return_value.pricing = {"memory_query": 2}
+        mock_cfg.return_value.phoenixd_url = "http://localhost:9740"
+        mock_cfg.return_value.phoenixd_password = ""
+        result = srv.ln_remote_query(
+            gateway_url="https://gw.example.com",
+            operation="memory_query",
+            params='{"query": "test"}',
+        )
+
+    # Check transaction was logged
+    memories = engine.list(memory_type="transaction")
+    assert len(memories) >= 1
+    found = any("L402" in m["content"] for m in memories)
+    assert found

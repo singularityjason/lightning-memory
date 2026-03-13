@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 from mcp.server.fastmcp import FastMCP
 
 from .budget import BudgetEngine
@@ -61,8 +63,6 @@ def memory_store(
     Returns:
         The stored memory record with id, content, type, and timestamps.
     """
-    import json
-
     engine = _get_engine()
     meta = json.loads(metadata) if isinstance(metadata, str) else metadata
     result = engine.store(content=content, memory_type=type, metadata=meta)
@@ -252,6 +252,7 @@ def memory_sync(direction: str = "both") -> dict:
     """Sync memories with Nostr relays.
 
     Push local memories to relays and/or pull remote memories to local.
+    When gateway_discovery is enabled, also syncs gateway announcements.
     Requires secp256k1 for push (signing). Pull works with any identity.
 
     Args:
@@ -263,15 +264,28 @@ def memory_sync(direction: str = "both") -> dict:
     Returns:
         Sync result with counts of pushed/pulled memories and any errors.
     """
-    from .sync import pull_memories, pull_trust_assertions, push_memories, SyncResult
+    from .sync import (
+        pull_memories, pull_trust_assertions, push_memories,
+        pull_gateway_announcements, push_gateway_announcement,
+        SyncResult,
+    )
 
     engine = _get_engine()
+    config = load_config()
     combined = SyncResult()
 
     if direction in ("push", "both"):
         push_result = push_memories(engine.conn, engine.identity)
         combined.pushed = push_result.pushed
         combined.errors.extend(push_result.errors)
+
+        # Push gateway announcement if configured
+        if config.gateway_discovery and config.gateway_url:
+            gw_result = push_gateway_announcement(
+                engine.conn, engine.identity, config.gateway_url,
+            )
+            combined.pushed += gw_result.pushed
+            combined.errors.extend(gw_result.errors)
 
     if direction in ("pull", "both"):
         pull_result = pull_memories(engine.conn, engine.identity)
@@ -282,6 +296,12 @@ def memory_sync(direction: str = "both") -> dict:
         ta_result = pull_trust_assertions(engine.conn, engine.identity)
         combined.pulled += ta_result.pulled
         combined.errors.extend(ta_result.errors)
+
+        # Pull gateway announcements if discovery is enabled
+        if config.gateway_discovery:
+            gw_result = pull_gateway_announcements(engine.conn, engine.identity)
+            combined.pulled += gw_result.pulled
+            combined.errors.extend(gw_result.errors)
 
     return {
         "status": "completed",
@@ -327,8 +347,6 @@ def ln_budget_status() -> dict:
     Returns:
         Earnings summary: total sats, payment count, breakdown by operation.
     """
-    import json as _json
-
     engine = _get_engine()
     payments = engine.list(memory_type="l402_payment", limit=1000)
     total_sats = 0
@@ -336,7 +354,7 @@ def ln_budget_status() -> dict:
     for p in payments:
         meta = p.get("metadata", {})
         if isinstance(meta, str):
-            meta = _json.loads(meta) if meta else {}
+            meta = json.loads(meta) if meta else {}
         sats = meta.get("amount_sats", 0)
         total_sats += sats
         op = meta.get("operation", "unknown")
@@ -693,6 +711,104 @@ def ln_compliance_report(since: str = "30d", format: str = "json") -> dict:
     return {"report": report, "format": format}
 
 
+@mcp.tool()
+def ln_discover_gateways(operation: str | None = None) -> dict:
+    """List known Lightning Memory gateways discovered via Nostr relays.
+
+    Args:
+        operation: Optional filter — only return gateways offering this operation
+                   (e.g., "memory_query", "ln_vendor_reputation").
+
+    Returns:
+        List of known gateways with URL, operations, pricing, and last seen time.
+    """
+    engine = _get_engine()
+    rows = engine.conn.execute(
+        "SELECT agent_pubkey, url, operations, relays, last_seen FROM known_gateways "
+        "ORDER BY last_seen DESC"
+    ).fetchall()
+
+    gateways = []
+    for row in rows:
+        ops = json.loads(row["operations"]) if row["operations"] else {}
+        if operation and operation not in ops:
+            continue
+        gateways.append({
+            "agent_pubkey": row["agent_pubkey"],
+            "url": row["url"],
+            "operations": ops,
+            "relays": json.loads(row["relays"]) if row["relays"] else [],
+            "last_seen": row["last_seen"],
+        })
+
+    return {"count": len(gateways), "gateways": gateways}
+
+
+@mcp.tool()
+def ln_remote_query(
+    gateway_url: str,
+    operation: str,
+    params: str = "{}",
+) -> dict:
+    """Query a remote Lightning Memory gateway via L402 micropayment.
+
+    Pays the gateway's Lightning invoice automatically via Phoenixd,
+    then returns the query results. The payment is logged as a transaction memory.
+
+    Args:
+        gateway_url: URL of the remote gateway (e.g., "https://gw.example.com").
+        operation: Operation to perform. One of: memory_query, memory_list,
+                   ln_vendor_reputation, ln_spending_summary, ln_anomaly_check,
+                   ln_preflight, ln_vendor_trust, ln_budget_check, ln_compliance_report.
+        params: JSON string of operation-specific parameters.
+
+    Returns:
+        Remote gateway's response data, or error details.
+    """
+    from . import client as _client
+
+    if operation not in _client.OPERATION_MAP:
+        return {"error": f"Unknown operation: {operation}. Valid: {list(_client.OPERATION_MAP.keys())}"}
+
+    try:
+        parsed_params = json.loads(params)
+    except json.JSONDecodeError:
+        return {"error": "Invalid JSON in params"}
+
+    config = load_config()
+    gateway_client = _client.GatewayClient(
+        url=gateway_url,
+        phoenixd_url=config.phoenixd_url,
+        phoenixd_password=config.phoenixd_password,
+    )
+
+    try:
+        data = gateway_client.query(operation, parsed_params)
+    except Exception as e:
+        return {"error": str(e), "operation": operation, "gateway_url": gateway_url}
+
+    # Log the L402 payment as a transaction memory
+    price = config.pricing.get(operation, 0)
+    engine = _get_engine()
+    engine.store(
+        content=f"L402 remote query: {price} sats to {gateway_url} for {operation}",
+        memory_type="transaction",
+        metadata={
+            "vendor": gateway_url,
+            "amount_sats": price,
+            "operation": operation,
+            "protocol": "l402",
+        },
+    )
+
+    return {
+        "status": "success",
+        "operation": operation,
+        "gateway_url": gateway_url,
+        "data": data,
+    }
+
+
 def _cmd_relay_status() -> None:
     """Show connection status for configured Nostr relays."""
     import asyncio
@@ -738,6 +854,27 @@ def _cmd_relay_status() -> None:
             print(f"Memories pushed: {synced}")
     except Exception:
         pass
+
+
+
+def generate_gateway_manifest() -> dict:
+    """Generate a .well-known/lightning-memory.json manifest."""
+    import lightning_memory
+    engine = _get_engine()
+    config = load_config()
+    return {
+        "agent_pubkey": engine.identity.public_key_hex,
+        "gateway_url": config.gateway_url,
+        "operations": config.pricing,
+        "relays": config.relays,
+        "version": lightning_memory.__version__,
+    }
+
+
+def gateway_manifest_main() -> None:
+    """CLI: Print gateway manifest JSON to stdout."""
+    manifest = generate_gateway_manifest()
+    print(json.dumps(manifest, indent=2))
 
 
 def main():
