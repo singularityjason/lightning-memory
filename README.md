@@ -200,6 +200,61 @@ ln_trust_attest(vendor="bitrefill.com")
 
 Score is auto-calculated from local reputation if not provided. Other agents pull these attestations via `memory_sync` to build community trust scores.
 
+### `ln_agent_attest`
+
+Store a KYA (Know Your Agent) attestation for an agent's identity.
+
+```
+ln_agent_attest(
+  agent_pubkey="abcd1234...",
+  owner_id="jason@e1.ai",
+  jurisdiction="US",
+  compliance_level="self_declared",
+  source="manual"
+)
+# → {status: "stored", compliance_level: "self_declared"}
+```
+
+**Compliance levels:** `unknown`, `self_declared`, `kyc_verified`, `regulated_entity`
+
+### `ln_agent_verify`
+
+Look up a KYA attestation for an agent by public key.
+
+```
+ln_agent_verify(agent_pubkey="abcd1234...")
+# → {status: "verified", compliance_level: "kyc_verified", jurisdiction: "EU"}
+```
+
+### `ln_auth_session`
+
+Store or update an LNURL-auth session record for a vendor.
+
+```
+ln_auth_session(vendor="bitrefill.com", linking_key="02abc123...")
+# → {status: "stored", session_state: "active"}
+```
+
+**Session states:** `active`, `expired`, `revoked`
+
+### `ln_auth_lookup`
+
+Look up an existing LNURL-auth session for a vendor.
+
+```
+ln_auth_lookup(vendor="bitrefill.com")
+# → {has_session: true, linking_key: "02abc123...", session_state: "active"}
+```
+
+### `ln_compliance_report`
+
+Generate a structured compliance report for audit/export.
+
+```
+ln_compliance_report(since="30d")
+# → {report: {agent_identity: {...}, transactions: [...], budget_rules: [...], vendor_kyc: [...], ...}}
+```
+
 ### `memory_sync`
 
 Sync memories with Nostr relays (push and/or pull). Also pulls NIP-85 trust assertions for vendors in local transaction history.
@@ -277,6 +332,7 @@ Agent                          Gateway                      Phoenixd
 | `/ln/preflight` | POST | 3 sats | Pre-flight payment gate |
 | `/ln/trust/{name}` | GET | 2 sats | Vendor trust profile |
 | `/ln/budget` | GET | 1 sat | Budget rules and spending |
+| `/ln/compliance-report` | GET | 10 sats | Compliance report export |
 
 ### Phoenixd Setup
 
@@ -368,6 +424,7 @@ All data is stored locally:
 - [x] Phase 4: L402 payment gateway (macaroons, Phoenixd, Starlette HTTP gateway)
 - [x] Phase 5: Compliance & trust layer (budget enforcement, vendor KYC, community reputation, payment pre-flight gate)
 - [x] Phase 5.1: Community reputation — live NIP-85 trust attestation sync
+- [x] Phase 5.2: Compliance integration — KYA attestations, LNURL-auth sessions, compliance reports
 
 ## Star History
 
