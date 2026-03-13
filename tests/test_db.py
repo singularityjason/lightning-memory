@@ -48,6 +48,22 @@ def test_vendor_kyc_table_exists(tmp_db):
     assert row is not None, "vendor_kyc table should exist"
 
 
+def test_agent_attestations_table_exists(tmp_db):
+    """Schema should include agent_attestations table."""
+    tables = {row[0] for row in tmp_db.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'"
+    ).fetchall()}
+    assert "agent_attestations" in tables
+
+
+def test_auth_sessions_table_exists(tmp_db):
+    """Schema should include auth_sessions table."""
+    tables = {row[0] for row in tmp_db.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'"
+    ).fetchall()}
+    assert "auth_sessions" in tables
+
+
 class TestStore:
     def test_store_basic(self, tmp_db):
         result = store_memory(tmp_db, "id1", "hello world")

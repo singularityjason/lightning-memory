@@ -72,6 +72,30 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             created_at REAL NOT NULL,
             updated_at REAL NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS agent_attestations (
+            agent_pubkey TEXT PRIMARY KEY,
+            owner_id TEXT DEFAULT '',
+            jurisdiction TEXT DEFAULT '',
+            compliance_level TEXT DEFAULT 'unknown',
+            verification_source TEXT DEFAULT '',
+            verified_at REAL,
+            created_at REAL NOT NULL,
+            updated_at REAL NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS auth_sessions (
+            vendor TEXT NOT NULL,
+            agent_pubkey TEXT NOT NULL,
+            linking_key TEXT NOT NULL,
+            session_state TEXT DEFAULT 'active',
+            last_auth_at REAL,
+            created_at REAL NOT NULL,
+            updated_at REAL NOT NULL,
+            PRIMARY KEY (vendor, agent_pubkey)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_auth_vendor ON auth_sessions(vendor);
     """)
 
     # FTS5 virtual table for full-text search
