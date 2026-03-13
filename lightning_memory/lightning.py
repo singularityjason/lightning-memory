@@ -80,3 +80,69 @@ class AnomalyReport:
             "proposed_sats": self.proposed_sats,
             "vendor": self.vendor,
         }
+
+
+@dataclass
+class BudgetRule:
+    """Spending limit rule for a vendor."""
+
+    vendor: str
+    max_sats_per_txn: int | None = None
+    max_sats_per_day: int | None = None
+    max_sats_per_month: int | None = None
+    enabled: bool = True
+
+    def to_dict(self) -> dict:
+        return {
+            "vendor": self.vendor,
+            "max_sats_per_txn": self.max_sats_per_txn,
+            "max_sats_per_day": self.max_sats_per_day,
+            "max_sats_per_month": self.max_sats_per_month,
+            "enabled": self.enabled,
+        }
+
+
+@dataclass
+class VendorTrust:
+    """Combined trust profile for a vendor."""
+
+    vendor: str
+    kyc_verified: bool = False
+    jurisdiction: str = ""
+    community_score: float = 0.0
+    attestation_count: int = 0
+    local_reputation: VendorReputation | None = None
+
+    def to_dict(self) -> dict:
+        return {
+            "vendor": self.vendor,
+            "kyc_verified": self.kyc_verified,
+            "jurisdiction": self.jurisdiction,
+            "community_score": self.community_score,
+            "attestation_count": self.attestation_count,
+            "local_reputation": self.local_reputation.to_dict() if self.local_reputation else None,
+        }
+
+
+@dataclass
+class PreflightDecision:
+    """Result of a payment pre-flight check."""
+
+    verdict: str = "approve"  # approve | reject | escalate
+    vendor: str = ""
+    proposed_sats: int = 0
+    reasons: list[str] = field(default_factory=list)
+    budget_remaining_today: int | None = None
+    anomaly_verdict: str = ""
+    trust_score: float = 0.0
+
+    def to_dict(self) -> dict:
+        return {
+            "verdict": self.verdict,
+            "vendor": self.vendor,
+            "proposed_sats": self.proposed_sats,
+            "reasons": self.reasons,
+            "budget_remaining_today": self.budget_remaining_today,
+            "anomaly_verdict": self.anomaly_verdict,
+            "trust_score": self.trust_score,
+        }
