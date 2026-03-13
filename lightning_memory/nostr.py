@@ -241,3 +241,60 @@ class NostrIdentity:
             self.sign_event(event)
 
         return event
+
+    def create_trust_assertion_event(
+        self,
+        vendor: str,
+        score: float,
+        basis: str = "transaction_history",
+        sign: bool = False,
+    ) -> dict:
+        """Create a NIP-85 Trusted Assertion event (kind 30382).
+
+        Args:
+            vendor: Vendor name/domain being attested.
+            score: Trust score 0.0-1.0.
+            basis: Reason for the score (e.g., "transaction_history").
+            sign: If True and secp256k1 is available, sign the event.
+
+        Returns:
+            dict with Nostr event fields.
+
+        Raises:
+            ValueError: If score is outside 0.0-1.0 range.
+        """
+        if score < 0.0 or score > 1.0:
+            raise ValueError(f"score must be between 0.0 and 1.0, got {score}")
+
+        now = int(time.time())
+        content = json.dumps({
+            "vendor": vendor,
+            "score": score,
+            "basis": basis,
+        })
+
+        tags = [
+            ["d", f"trust:{vendor}"],
+            ["client", "lightning-memory"],
+        ]
+
+        event = {
+            "kind": NIP85_KIND,
+            "pubkey": self.public_key_hex,
+            "created_at": now,
+            "tags": tags,
+            "content": content,
+        }
+
+        serialized = json.dumps(
+            [0, event["pubkey"], event["created_at"], event["kind"],
+             event["tags"], event["content"]],
+            separators=(",", ":"),
+            ensure_ascii=False,
+        )
+        event["id"] = hashlib.sha256(serialized.encode()).hexdigest()
+
+        if sign:
+            self.sign_event(event)
+
+        return event

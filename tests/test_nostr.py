@@ -179,3 +179,35 @@ def test_parse_trust_assertion_score_boundary():
     event_one = {"kind": 30382, "content": '{"score": 1.0, "vendor": "x.com"}', "pubkey": "abc", "created_at": 1}
     assert parse_trust_assertion(event_zero) is not None
     assert parse_trust_assertion(event_one) is not None
+
+
+def test_create_trust_assertion_event(tmp_path):
+    """NostrIdentity should create a valid NIP-85 kind 30382 event."""
+    keys_dir = tmp_path / "keys"
+    keys_dir.mkdir()
+    identity = NostrIdentity.load_or_create(keys_dir)
+    event = identity.create_trust_assertion_event(
+        vendor="bitrefill.com",
+        score=0.85,
+        basis="transaction_history",
+        sign=False,
+    )
+    assert event["kind"] == 30382
+    assert event["pubkey"] == identity.public_key_hex
+    content = json.loads(event["content"])
+    assert content["vendor"] == "bitrefill.com"
+    assert content["score"] == 0.85
+    assert content["basis"] == "transaction_history"
+    # Check d tag for replaceable event semantics
+    d_tag = [t for t in event["tags"] if t[0] == "d"]
+    assert len(d_tag) == 1
+    assert d_tag[0][1] == "trust:bitrefill.com"
+
+
+def test_create_trust_assertion_event_score_validation(tmp_path):
+    """Should raise ValueError for out-of-range scores."""
+    keys_dir = tmp_path / "keys"
+    keys_dir.mkdir()
+    identity = NostrIdentity.load_or_create(keys_dir)
+    with pytest.raises(ValueError, match="score must be"):
+        identity.create_trust_assertion_event("x.com", score=1.5)
