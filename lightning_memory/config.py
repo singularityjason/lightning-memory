@@ -25,6 +25,9 @@ DEFAULT_PRICING = {
     "ln_vendor_reputation": 3,
     "ln_spending_summary": 2,
     "ln_anomaly_check": 3,
+    "ln_preflight": 3,
+    "ln_vendor_trust": 2,
+    "ln_budget_check": 1,
 }
 
 

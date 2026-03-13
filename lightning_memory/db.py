@@ -49,6 +49,29 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_memories_type ON memories(type);
         CREATE INDEX IF NOT EXISTS idx_memories_created ON memories(created_at);
         CREATE INDEX IF NOT EXISTS idx_memories_nostr ON memories(nostr_event_id);
+
+        CREATE TABLE IF NOT EXISTS budget_rules (
+            id TEXT PRIMARY KEY,
+            vendor TEXT NOT NULL,
+            max_sats_per_txn INTEGER,
+            max_sats_per_day INTEGER,
+            max_sats_per_month INTEGER,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            created_at REAL NOT NULL,
+            updated_at REAL NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_budget_vendor ON budget_rules(vendor);
+
+        CREATE TABLE IF NOT EXISTS vendor_kyc (
+            vendor TEXT PRIMARY KEY,
+            kyc_verified INTEGER NOT NULL DEFAULT 0,
+            jurisdiction TEXT DEFAULT '',
+            verification_source TEXT DEFAULT '',
+            verified_at REAL,
+            created_at REAL NOT NULL,
+            updated_at REAL NOT NULL
+        );
     """)
 
     # FTS5 virtual table for full-text search

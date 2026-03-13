@@ -108,6 +108,9 @@ _ROUTE_MAP = {
     "/ln/vendor": "ln_vendor_reputation",
     "/ln/spending": "ln_spending_summary",
     "/ln/anomaly-check": "ln_anomaly_check",
+    "/ln/preflight": "ln_preflight",
+    "/ln/trust": "ln_vendor_trust",
+    "/ln/budget": "ln_budget_check",
 }
 
 
@@ -304,6 +307,41 @@ async def ln_anomaly_check_handler(request: Request) -> JSONResponse:
     return JSONResponse({"anomaly": report.to_dict()})
 
 
+async def ln_preflight_handler(request: Request) -> JSONResponse:
+    """Pre-flight payment check (L402-gated)."""
+    body = await request.json()
+    from .preflight import PreflightEngine
+    pf = PreflightEngine(conn=_get_engine().conn)
+    decision = pf.check(body["vendor"], body["amount_sats"])
+    return JSONResponse({"decision": decision.to_dict()})
+
+
+async def ln_trust_handler(request: Request) -> JSONResponse:
+    """Vendor trust profile (L402-gated)."""
+    vendor = request.path_params["name"]
+    from .trust import TrustEngine
+    trust = TrustEngine(conn=_get_engine().conn)
+    profile = trust.vendor_trust_profile(vendor)
+    return JSONResponse({"trust": profile.to_dict()})
+
+
+async def ln_budget_handler(request: Request) -> JSONResponse:
+    """Budget rules and spending status (L402-gated)."""
+    from .budget import BudgetEngine
+    budget = BudgetEngine(conn=_get_engine().conn)
+    vendor = request.query_params.get("vendor")
+    if vendor:
+        rule = budget.get_rule(vendor)
+        if not rule:
+            return JSONResponse({"vendor": vendor, "has_rule": False})
+        return JSONResponse({
+            "vendor": vendor, "has_rule": True,
+            "rule": rule.to_dict(), "spent_today": budget.spent_today(vendor),
+        })
+    rules = budget.list_rules()
+    return JSONResponse({"count": len(rules), "rules": [r.to_dict() for r in rules]})
+
+
 # --- App Factory ---
 
 
@@ -318,6 +356,9 @@ def create_app() -> Starlette:
         Route("/ln/vendor/{name}", ln_vendor_handler, methods=["GET"]),
         Route("/ln/spending", ln_spending_handler, methods=["GET"]),
         Route("/ln/anomaly-check", ln_anomaly_check_handler, methods=["POST"]),
+        Route("/ln/preflight", ln_preflight_handler, methods=["POST"]),
+        Route("/ln/trust/{name}", ln_trust_handler, methods=["GET"]),
+        Route("/ln/budget", ln_budget_handler, methods=["GET"]),
     ]
 
     return Starlette(

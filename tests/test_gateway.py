@@ -335,3 +335,20 @@ class TestFullRoundTrip:
         body = resp.json()
         # At least one l402_payment memory should exist
         assert body["count"] >= 1
+
+
+class TestNewRoutes:
+    def test_preflight_route_exists(self, gateway_client):
+        """POST /ln/preflight should return 402 without auth."""
+        resp = gateway_client.post("/ln/preflight", json={"vendor": "test.com", "amount_sats": 100})
+        assert resp.status_code == 402
+
+    def test_trust_route_exists(self, gateway_client):
+        """GET /ln/trust/{vendor} should return 402 without auth."""
+        resp = gateway_client.get("/ln/trust/bitrefill.com")
+        assert resp.status_code == 402
+
+    def test_budget_route_exists(self, gateway_client):
+        """GET /ln/budget should return 402 without auth."""
+        resp = gateway_client.get("/ln/budget")
+        assert resp.status_code == 402
