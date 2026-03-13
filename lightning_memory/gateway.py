@@ -111,6 +111,7 @@ _ROUTE_MAP = {
     "/ln/preflight": "ln_preflight",
     "/ln/trust": "ln_vendor_trust",
     "/ln/budget": "ln_budget_check",
+    "/ln/compliance-report": "ln_compliance_report",
 }
 
 
@@ -342,6 +343,16 @@ async def ln_budget_handler(request: Request) -> JSONResponse:
     return JSONResponse({"count": len(rules), "rules": [r.to_dict() for r in rules]})
 
 
+async def ln_compliance_report_handler(request: Request) -> JSONResponse:
+    """Compliance report export (L402-gated, premium)."""
+    from .compliance import ComplianceEngine
+    engine = _get_engine()
+    since = request.query_params.get("since", "30d")
+    ce = ComplianceEngine(conn=engine.conn, identity=engine.identity)
+    report = ce.generate_report(since=since)
+    return JSONResponse({"report": report, "format": "json"})
+
+
 # --- App Factory ---
 
 
@@ -359,6 +370,7 @@ def create_app() -> Starlette:
         Route("/ln/preflight", ln_preflight_handler, methods=["POST"]),
         Route("/ln/trust/{name}", ln_trust_handler, methods=["GET"]),
         Route("/ln/budget", ln_budget_handler, methods=["GET"]),
+        Route("/ln/compliance-report", ln_compliance_report_handler, methods=["GET"]),
     ]
 
     return Starlette(

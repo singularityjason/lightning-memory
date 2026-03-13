@@ -352,3 +352,8 @@ class TestNewRoutes:
         """GET /ln/budget should return 402 without auth."""
         resp = gateway_client.get("/ln/budget")
         assert resp.status_code == 402
+
+    def test_compliance_report_route_exists(self, gateway_client):
+        """GET /ln/compliance-report should return 402 without auth."""
+        resp = gateway_client.get("/ln/compliance-report")
+        assert resp.status_code == 402

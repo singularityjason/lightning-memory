@@ -6,9 +6,9 @@ from lightning_memory import server
 
 
 def test_tool_count():
-    """Server should expose 14 tools."""
+    """Server should expose 19 tools."""
     tools = server.mcp._tool_manager._tools
-    assert len(tools) == 14, f"Expected 14, got {len(tools)}: {list(tools.keys())}"
+    assert len(tools) == 19, f"Expected 19, got {len(tools)}: {list(tools.keys())}"
 
 
 class TestToolRoundTrip:
@@ -241,3 +241,14 @@ def test_ln_auth_lookup_not_found(engine):
     srv._engine = engine
     result = srv.ln_auth_lookup(vendor="unknown.com")
     assert result["has_session"] is False
+
+
+def test_ln_compliance_report(engine):
+    """ln_compliance_report should return structured report."""
+    import lightning_memory.server as srv
+    srv._engine = engine
+    engine.store("Paid 100 sats", "transaction", {"vendor": "test.com", "amount_sats": 100})
+    result = srv.ln_compliance_report(since="30d")
+    assert "report" in result
+    assert "agent_identity" in result["report"]
+    assert len(result["report"]["transactions"]) == 1

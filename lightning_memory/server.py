@@ -1,4 +1,4 @@
-"""Lightning Memory MCP server: 14 tools for agent memory, intelligence, and sync."""
+"""Lightning Memory MCP server: 19 tools for agent memory, intelligence, and sync."""
 
 from __future__ import annotations
 
@@ -667,6 +667,30 @@ def ln_auth_lookup(vendor: str) -> dict:
         "session_state": row["session_state"],
         "last_auth_at": row["last_auth_at"],
     }
+
+
+@mcp.tool()
+def ln_compliance_report(since: str = "30d", format: str = "json") -> dict:
+    """Generate a structured compliance report.
+
+    Produces a comprehensive report covering agent identity, transactions,
+    budget rules, vendor KYC status, anomaly flags, and trust attestations.
+    Designed for regulatory compliance export.
+
+    Args:
+        since: Time period for temporal data. Relative: "1h", "24h", "7d", "30d".
+            Current-state data (budget rules, KYC) is always included.
+        format: Output format. Only "json" supported in v1.
+
+    Returns:
+        Compliance report as a structured dict.
+    """
+    from .compliance import ComplianceEngine
+
+    engine = _get_engine()
+    ce = ComplianceEngine(conn=engine.conn, identity=engine.identity)
+    report = ce.generate_report(since=since)
+    return {"report": report, "format": format}
 
 
 def _cmd_relay_status() -> None:

@@ -28,6 +28,7 @@ DEFAULT_PRICING = {
     "ln_preflight": 3,
     "ln_vendor_trust": 2,
     "ln_budget_check": 1,
+    "ln_compliance_report": 10,
 }
 
 
