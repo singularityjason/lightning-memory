@@ -10,8 +10,7 @@ Decentralized agent memory for the Lightning economy. Store, query, and recall m
 
 AI agents can spend sats over Lightning via L402. But they can't remember what they bought. Every session starts from zero — every vendor is a stranger, every price is accepted at face value, and lessons learned yesterday are gone today. Lightning Memory is the missing memory layer: **L1 settles. L2 pays. L3 remembers.**
 
-<!-- Demo GIF placeholder — replace with terminal recording -->
-<!-- ![Lightning Memory Demo](assets/demo.gif) -->
+**[Interactive Demo](https://www.jasonsosa.com/blog/lightning-memory-demo)** — watch an agent learn, get rugged, and route around bad actors in 5 scenes.
 
 ## How It Compares
 
