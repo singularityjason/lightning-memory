@@ -23,6 +23,9 @@ AI agents can spend sats over Lightning via L402. But they can't remember what t
 | Relay sync (NIP-78) | Yes | No | No | No |
 | Full-text search (FTS5) | Yes | Yes | No | No |
 | Agent-to-agent knowledge markets | Yes (L402 gateway) | No | No | No |
+| Budget enforcement | Yes | No | No | No |
+| KYC/trust profiles | Yes | No | No | No |
+| Payment pre-flight gate | Yes | No | No | No |
 | Local-first / offline | Yes | Cloud | Yes | N/A |
 | MCP native | Yes | Plugin | No | No |
 | Zero config | Yes | API key required | Manual setup | N/A |
@@ -150,6 +153,42 @@ ln_anomaly_check(vendor="bitrefill.com", amount_sats=5000)
 # → {anomaly: {verdict: "high", context: "5000 sats is 11.1x the historical average..."}}
 ```
 
+### `ln_budget_set`
+
+Set spending limits for a vendor.
+
+```
+ln_budget_set(vendor="bitrefill.com", max_sats_per_txn=1000, max_sats_per_day=5000)
+# → {status: "set", rule: {vendor: "bitrefill.com", max_sats_per_txn: 1000, ...}}
+```
+
+### `ln_budget_check`
+
+List budget rules and current spending against limits.
+
+```
+ln_budget_check(vendor="bitrefill.com")
+# → {vendor: "bitrefill.com", has_rule: true, rule: {...}, spent_today: 350}
+```
+
+### `ln_vendor_trust`
+
+Get a vendor's full trust profile (KYC + reputation + community).
+
+```
+ln_vendor_trust(vendor="bitrefill.com")
+# → {trust: {kyc_verified: true, community_score: 0.89, attestation_count: 15, ...}}
+```
+
+### `ln_preflight`
+
+Pre-flight check before making a payment. **Use this before every payment.**
+
+```
+ln_preflight(vendor="bitrefill.com", amount_sats=500)
+# → {decision: {verdict: "approve", budget_remaining_today: 4500, trust_score: 0.89}}
+```
+
 ### `memory_sync`
 
 Sync memories with Nostr relays (push and/or pull).
@@ -224,6 +263,9 @@ Agent                          Gateway                      Phoenixd
 | `/ln/vendor/{name}` | GET | 3 sats | Vendor reputation report |
 | `/ln/spending` | GET | 2 sats | Spending summary |
 | `/ln/anomaly-check` | POST | 3 sats | Payment anomaly detection |
+| `/ln/preflight` | POST | 3 sats | Pre-flight payment gate |
+| `/ln/trust/{name}` | GET | 2 sats | Vendor trust profile |
+| `/ln/budget` | GET | 1 sat | Budget rules and spending |
 
 ### Phoenixd Setup
 
@@ -313,6 +355,7 @@ All data is stored locally:
 - [x] Phase 2: Lightning intelligence layer (vendor reputation, spending summary, anomaly detection)
 - [x] Phase 3: Nostr relay sync (NIP-78 events, Schnorr signing, bidirectional sync)
 - [x] Phase 4: L402 payment gateway (macaroons, Phoenixd, Starlette HTTP gateway)
+- [x] Phase 5: Compliance & trust layer (budget enforcement, vendor KYC, community reputation, payment pre-flight gate)
 
 ## Star History
 
