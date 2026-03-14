@@ -12,6 +12,8 @@ AI agents can spend sats over Lightning via L402. But they can't remember what t
 
 **[Interactive Demo](https://www.jasonsosa.com/blog/agent-lightning-memory)** — watch an agent learn, get rugged, and route around bad actors in 5 scenes.
 
+**[Building the Agent Economy](https://www.jasonsosa.com/blog/agent-economy-trust-marketplace-bitcoin-lightning)** — trust, budgets, compliance, and the memory marketplace (v0.6.0).
+
 ## How It Compares
 
 | Feature | Lightning Memory | Mem0 | Raw file storage | No memory |
