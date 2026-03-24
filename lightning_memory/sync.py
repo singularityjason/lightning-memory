@@ -15,7 +15,7 @@ from typing import Any
 
 from .config import load_config
 from .nostr import KIND_NIP78, NIP85_KIND, NostrIdentity, parse_trust_assertion
-from .relay import fetch_from_relays, publish_to_relays
+from .relay import fetch_from_relays, publish_batch_to_relays, publish_to_relays
 
 
 @dataclass
@@ -107,6 +107,8 @@ def push_memories(
     if not rows:
         return result
 
+    # Build all events first, then publish in a single event loop
+    events_with_ids: list[tuple[str, dict]] = []
     for row in rows:
         meta = json.loads(row["metadata"]) if row["metadata"] else None
         event = identity.create_memory_event(
@@ -116,25 +118,31 @@ def push_memories(
             metadata=meta,
             sign=True,
         )
+        events_with_ids.append((row["id"], event))
 
-        try:
-            responses = asyncio.run(
-                publish_to_relays(config.relays, event, config.sync_timeout_seconds)
+    try:
+        batch_results = asyncio.run(
+            publish_batch_to_relays(
+                config.relays,
+                [ev for _, ev in events_with_ids],
+                config.sync_timeout_seconds,
             )
+        )
+        for (memory_id, _event), (_ev, responses) in zip(events_with_ids, batch_results):
             success_count = sum(1 for r in responses if r.success)
             if success_count > 0:
                 conn.execute(
                     "INSERT OR REPLACE INTO sync_log (memory_id, event_id, pushed_at, relay_count) "
                     "VALUES (?, ?, ?, ?)",
-                    (row["id"], event["id"], time.time(), success_count),
+                    (memory_id, _event["id"], time.time(), success_count),
                 )
                 conn.commit()
                 result.pushed += 1
             else:
                 errors = [f"{r.relay}: {r.message}" for r in responses if not r.success]
                 result.errors.extend(errors)
-        except Exception as e:
-            result.errors.append(f"Push failed for {row['id']}: {e}")
+    except Exception as e:
+        result.errors.append(f"Batch push failed: {e}")
 
     return result
 
@@ -253,24 +261,34 @@ def pull_trust_assertions(
     if not vendors:
         return result
 
-    # Query relays for trust assertions about known vendors
+    # Query relays for trust assertions about known vendors (batched)
     all_events: list[dict] = []
     seen_ids: set[str] = set()
 
-    for vendor in vendors:
-        filters: dict[str, Any] = {
-            "kinds": [NIP85_KIND],
-            "#d": [f"trust:{vendor}"],
-            "limit": 50,
-        }
-        try:
-            responses = asyncio.run(
-                fetch_from_relays(config.relays, filters, config.sync_timeout_seconds)
-            )
-        except Exception as e:
-            result.errors.append(f"Fetch failed for {vendor}: {e}")
-            continue
+    async def _fetch_all_vendor_assertions() -> list[tuple[str, list]]:
+        """Fetch trust assertions for all vendors in a single event loop."""
+        tasks = []
+        vendor_list = sorted(vendors)
+        for vendor in vendor_list:
+            filters: dict[str, Any] = {
+                "kinds": [NIP85_KIND],
+                "#d": [f"trust:{vendor}"],
+                "limit": 50,
+            }
+            tasks.append(fetch_from_relays(config.relays, filters, config.sync_timeout_seconds))
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        return list(zip(vendor_list, results))
 
+    try:
+        vendor_results = asyncio.run(_fetch_all_vendor_assertions())
+    except Exception as e:
+        result.errors.append(f"Batch fetch failed: {e}")
+        vendor_results = []
+
+    for vendor, responses in vendor_results:
+        if isinstance(responses, Exception):
+            result.errors.append(f"Fetch failed for {vendor}: {responses}")
+            continue
         for resp in responses:
             if not resp.success:
                 result.errors.append(f"{resp.relay}: {resp.message}")

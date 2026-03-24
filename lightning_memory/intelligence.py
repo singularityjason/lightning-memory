@@ -12,6 +12,7 @@ import sqlite3
 from typing import Any
 
 from .lightning import AnomalyReport, SpendingSummary, VendorReputation
+from .memory import normalize_vendor
 
 
 class IntelligenceEngine:
@@ -21,33 +22,46 @@ class IntelligenceEngine:
         self.conn = conn
 
     def vendor_report(self, vendor: str) -> VendorReputation:
-        """Build a reputation report for a vendor from transaction memories."""
+        """Build a reputation report for a vendor from transaction memories.
+
+        Single-pass: counts transactions, sats, and failures in one scan.
+        """
         rows = self.conn.execute(
-            """SELECT content, metadata FROM memories
-               WHERE type = 'transaction'
+            """SELECT content, type, metadata FROM memories
+               WHERE type IN ('transaction', 'error')
                ORDER BY created_at DESC""",
         ).fetchall()
 
-        vendor_lower = vendor.lower()
+        vendor_norm = normalize_vendor(vendor)
         rep = VendorReputation(vendor=vendor)
         tags: set[str] = set()
+        failure_count = 0
 
         for row in rows:
             content = row["content"].lower()
             meta = json.loads(row["metadata"]) if row["metadata"] else {}
-            meta_vendor = meta.get("vendor", "").lower()
+            meta_vendor = normalize_vendor(meta["vendor"]) if meta.get("vendor") else ""
 
             # Match vendor in metadata or content
-            if vendor_lower not in meta_vendor and vendor_lower not in content:
+            if vendor_norm not in meta_vendor and vendor_norm not in content:
+                continue
+
+            is_failure = any(w in content for w in ("fail", "error", "timeout", "reject"))
+
+            # Only count transactions toward reputation stats
+            if row["type"] == "error":
+                # Error memories only contribute to failure count
+                if is_failure:
+                    failure_count += 1
                 continue
 
             rep.total_txns += 1
             amount = _extract_amount(meta, content)
             rep.total_sats += amount
 
-            # Check for failure indicators
-            if any(w in content for w in ("fail", "error", "timeout", "reject")):
+            if is_failure:
                 tags.add("has_failures")
+                failure_count += 1
 
             protocol = meta.get("protocol", "")
             if protocol:
@@ -55,8 +69,6 @@ class IntelligenceEngine:
 
         if rep.total_txns > 0:
             rep.avg_sats = rep.total_sats / rep.total_txns
-            # Count failures from content analysis
-            failure_count = self._count_vendor_failures(vendor_lower)
             rep.success_rate = max(0.0, 1.0 - (failure_count / rep.total_txns))
 
         rep.tags = sorted(tags)
@@ -132,7 +144,7 @@ class IntelligenceEngine:
         for row in rows:
             content = row["content"].lower()
             meta = json.loads(row["metadata"]) if row["metadata"] else {}
-            meta_vendor = meta.get("vendor", "").lower()
+            meta_vendor = normalize_vendor(meta.get("vendor", "")) if meta.get("vendor") else ""
 
             if vendor_lower not in meta_vendor and vendor_lower not in content:
                 continue

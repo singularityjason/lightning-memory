@@ -44,7 +44,11 @@ _PARAM_RENAMES: dict[str, dict[str, str]] = {
 
 
 class GatewayClient:
-    """Synchronous client for querying remote Lightning Memory gateways via L402."""
+    """Synchronous client for querying remote Lightning Memory gateways via L402.
+
+    Reuses a persistent httpx.Client for connection pooling.
+    Can be used as a context manager: ``with GatewayClient(...) as gw: ...``
+    """
 
     def __init__(
         self,
@@ -59,21 +63,41 @@ class GatewayClient:
         self.phoenixd_password = phoenixd_password
         self.timeout = timeout
         self.max_retries = max_retries
+        self._client: httpx.Client | None = None
+
+    def _get_client(self) -> httpx.Client:
+        if self._client is None or self._client.is_closed:
+            self._client = httpx.Client(
+                limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
+            )
+        return self._client
+
+    def close(self) -> None:
+        """Close the underlying HTTP client."""
+        if self._client is not None and not self._client.is_closed:
+            self._client.close()
+            self._client = None
+
+    def __enter__(self) -> GatewayClient:
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        self.close()
 
     def info(self) -> dict:
         """Fetch gateway info (free, no L402)."""
-        with httpx.Client() as client:
-            resp = client.get(f"{self.url}/info", timeout=self.timeout)
-            resp.raise_for_status()
-            return resp.json()
+        client = self._get_client()
+        resp = client.get(f"{self.url}/info", timeout=self.timeout)
+        resp.raise_for_status()
+        return resp.json()
 
     def discover_via_url(self, base_url: str) -> dict:
         """Fetch .well-known/lightning-memory.json from a URL."""
         url = f"{base_url.rstrip('/')}/.well-known/lightning-memory.json"
-        with httpx.Client() as client:
-            resp = client.get(url, timeout=self.timeout)
-            resp.raise_for_status()
-            return resp.json()
+        client = self._get_client()
+        resp = client.get(url, timeout=self.timeout)
+        resp.raise_for_status()
+        return resp.json()
 
     def query(self, operation: str, params: dict | None = None) -> dict:
         """Execute a query against a remote gateway with L402 payment.
@@ -113,44 +137,44 @@ class GatewayClient:
             body = params
 
         url = f"{self.url}{path}"
+        client = self._get_client()
 
-        with httpx.Client() as client:
-            # First request — expect 402
-            if method == "GET":
-                resp = client.get(url, params=query_params, timeout=self.timeout)
-            else:
-                resp = client.post(url, json=body, timeout=self.timeout)
+        # First request — expect 402
+        if method == "GET":
+            resp = client.get(url, params=query_params, timeout=self.timeout)
+        else:
+            resp = client.post(url, json=body, timeout=self.timeout)
 
-            if resp.status_code == 200:
-                return resp.json()
+        if resp.status_code == 200:
+            return resp.json()
 
-            if resp.status_code != 402:
-                raise RuntimeError(
-                    f"Gateway returned {resp.status_code}: {resp.text}"
-                )
+        if resp.status_code != 402:
+            raise RuntimeError(
+                f"Gateway returned {resp.status_code}: {resp.text}"
+            )
 
-            # Parse L402 challenge
-            www_auth = resp.headers.get("www-authenticate", "")
-            macaroon_b64, invoice = _parse_www_authenticate(www_auth)
+        # Parse L402 challenge
+        www_auth = resp.headers.get("www-authenticate", "")
+        macaroon_b64, invoice = _parse_www_authenticate(www_auth)
 
-            # Pay invoice via Phoenixd
-            preimage = self._pay_invoice(client, invoice)
+        # Pay invoice via Phoenixd
+        preimage = self._pay_invoice(client, invoice)
 
-            # Retry with L402 token
-            token = f"L402 {macaroon_b64}:{preimage}"
-            headers = {"Authorization": token}
+        # Retry with L402 token
+        token = f"L402 {macaroon_b64}:{preimage}"
+        headers = {"Authorization": token}
 
-            if method == "GET":
-                resp2 = client.get(url, params=query_params, headers=headers, timeout=self.timeout)
-            else:
-                resp2 = client.post(url, json=body, headers=headers, timeout=self.timeout)
+        if method == "GET":
+            resp2 = client.get(url, params=query_params, headers=headers, timeout=self.timeout)
+        else:
+            resp2 = client.post(url, json=body, headers=headers, timeout=self.timeout)
 
-            if resp2.status_code != 200:
-                raise RuntimeError(
-                    f"Gateway returned {resp2.status_code} after payment: {resp2.text}"
-                )
+        if resp2.status_code != 200:
+            raise RuntimeError(
+                f"Gateway returned {resp2.status_code} after payment: {resp2.text}"
+            )
 
-            return resp2.json()
+        return resp2.json()
 
     def _pay_invoice(self, client: httpx.Client, bolt11: str) -> str:
         """Pay a Lightning invoice via Phoenixd and return the preimage."""

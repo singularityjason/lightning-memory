@@ -35,6 +35,8 @@ ROOT_KEY_PATH = Path.home() / ".lightning-memory" / "gateway.key"
 _root_key: bytes | None = None
 _engine: MemoryEngine | None = None
 _phoenixd: PhoenixdClient | None = None
+# L402 payment idempotency: track used payment hashes to prevent double-logging
+_used_payment_hashes: dict[str, dict] = {}  # payment_hash -> cached response
 
 
 def _get_root_key() -> bytes:
@@ -75,10 +77,11 @@ def _get_phoenixd() -> PhoenixdClient:
 
 def _reset_state() -> None:
     """Clear all module state (for testing)."""
-    global _root_key, _engine, _phoenixd
+    global _root_key, _engine, _phoenixd, _used_payment_hashes
     _root_key = None
     _engine = None
     _phoenixd = None
+    _used_payment_hashes = {}
 
 
 def set_root_key(key: bytes) -> None:
@@ -158,7 +161,11 @@ class L402Middleware:
             try:
                 token = l402.parse_token(auth)
                 if l402.verify_token(_get_root_key(), token):
-                    _log_payment(operation, token)
+                    # Idempotency: only log payment once per payment_hash
+                    payment_hash = token.macaroon.payment_hash_hex
+                    if payment_hash not in _used_payment_hashes:
+                        _log_payment(operation, token)
+                        _used_payment_hashes[payment_hash] = {"operation": operation}
                     await self.app(scope, receive, send)
                     return
                 resp = JSONResponse({"error": "invalid_token"}, status_code=401)

@@ -13,6 +13,7 @@ import time
 
 from .intelligence import IntelligenceEngine
 from .lightning import VendorTrust
+from .memory import normalize_vendor
 
 
 class TrustEngine:
@@ -29,6 +30,7 @@ class TrustEngine:
         source: str = "",
     ) -> dict:
         """Set KYC verification status for a vendor."""
+        vendor = normalize_vendor(vendor)
         now = time.time()
         self.conn.execute(
             """INSERT INTO vendor_kyc (vendor, kyc_verified, jurisdiction,
@@ -48,6 +50,7 @@ class TrustEngine:
 
     def get_vendor_kyc(self, vendor: str) -> dict:
         """Get KYC status for a vendor."""
+        vendor = normalize_vendor(vendor)
         row = self.conn.execute(
             "SELECT * FROM vendor_kyc WHERE vendor = ?", (vendor,)
         ).fetchone()
@@ -75,12 +78,12 @@ class TrustEngine:
                ORDER BY created_at DESC""",
         ).fetchall()
 
-        vendor_lower = vendor.lower()
+        vendor_norm = normalize_vendor(vendor)
         scores: list[float] = []
         for row in rows:
             meta = json.loads(row["metadata"]) if row["metadata"] else {}
-            target = meta.get("vendor", "").lower()
-            if target != vendor_lower:
+            target = normalize_vendor(meta["vendor"]) if meta.get("vendor") else ""
+            if target != vendor_norm:
                 continue
             score = meta.get("trust_score")
             if score is not None:

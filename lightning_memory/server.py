@@ -9,7 +9,7 @@ from mcp.server.fastmcp import FastMCP
 from .budget import BudgetEngine
 from .config import load_config
 from .intelligence import IntelligenceEngine
-from .memory import MemoryEngine
+from .memory import MemoryEngine, normalize_vendor
 from .preflight import PreflightEngine
 from .trust import TrustEngine
 
@@ -65,6 +65,11 @@ def memory_store(
     """
     engine = _get_engine()
     meta = json.loads(metadata) if isinstance(metadata, str) else metadata
+
+    # Normalize vendor name at write time for consistent matching
+    if isinstance(meta, dict) and meta.get("vendor"):
+        meta["vendor"] = normalize_vendor(meta["vendor"])
+
     result = engine.store(content=content, memory_type=type, metadata=meta)
 
     response = {
@@ -165,6 +170,32 @@ def memory_list(
         "agent_pubkey": stats["agent_pubkey"],
         "memories": results,
     }
+
+
+@mcp.tool()
+def memory_edit(
+    id: str,
+    content: str | None = None,
+    metadata: str = "{}",
+) -> dict:
+    """Edit an existing memory's content or metadata.
+
+    Use this to correct wrong vendor information, update prices,
+    or add context to an existing memory. Tracks edit history.
+
+    Args:
+        id: The memory ID to edit.
+        content: New content to replace the existing content. If omitted, content is unchanged.
+        metadata: JSON string of metadata fields to merge into existing metadata.
+            Example: '{"vendor": "bitrefill.com", "note": "price updated"}'
+
+    Returns:
+        The updated memory record with old_content_preview for audit trail.
+    """
+    engine = _get_engine()
+    meta = json.loads(metadata) if isinstance(metadata, str) and metadata != "{}" else None
+    result = engine.edit(memory_id=id, new_content=content, new_metadata=meta)
+    return result
 
 
 def _get_intelligence() -> IntelligenceEngine:

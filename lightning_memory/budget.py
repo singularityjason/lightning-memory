@@ -12,6 +12,7 @@ import time
 import uuid
 
 from .lightning import BudgetRule
+from .memory import normalize_vendor
 
 
 class BudgetEngine:
@@ -28,6 +29,7 @@ class BudgetEngine:
         max_sats_per_month: int | None = None,
     ) -> BudgetRule:
         """Create or update a budget rule for a vendor."""
+        vendor = normalize_vendor(vendor)
         now = time.time()
         # Check for existing rule for this vendor
         existing = self.conn.execute(
@@ -57,6 +59,7 @@ class BudgetEngine:
 
     def get_rule(self, vendor: str) -> BudgetRule | None:
         """Get the budget rule for a vendor, or None."""
+        vendor = normalize_vendor(vendor)
         row = self.conn.execute(
             "SELECT * FROM budget_rules WHERE vendor = ? AND enabled = 1",
             (vendor,),
@@ -73,6 +76,7 @@ class BudgetEngine:
 
     def delete_rule(self, vendor: str) -> bool:
         """Delete a budget rule. Returns True if deleted."""
+        vendor = normalize_vendor(vendor)
         cursor = self.conn.execute(
             "DELETE FROM budget_rules WHERE vendor = ?", (vendor,)
         )
@@ -100,6 +104,7 @@ class BudgetEngine:
 
         Returns (ok, reason). If ok is True, reason is empty.
         """
+        vendor = normalize_vendor(vendor)
         rule = self.get_rule(vendor)
         if rule is None:
             return True, ""
@@ -146,10 +151,11 @@ class BudgetEngine:
         ).fetchall()
 
         total = 0
-        vendor_lower = vendor.lower()
+        vendor_norm = normalize_vendor(vendor)
         for row in rows:
             meta = json.loads(row["metadata"]) if row["metadata"] else {}
-            if meta.get("vendor", "").lower() == vendor_lower:
+            meta_vendor = normalize_vendor(meta["vendor"]) if meta.get("vendor") else ""
+            if meta_vendor == vendor_norm:
                 total += int(meta.get("amount_sats", 0))
         return total
 

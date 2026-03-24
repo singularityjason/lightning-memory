@@ -3,12 +3,37 @@
 from __future__ import annotations
 
 import hashlib
+import json
+import re
 import sqlite3
 import time
 from typing import Any
 
 from . import db
 from .nostr import NostrIdentity
+
+
+def normalize_vendor(name: str) -> str:
+    """Normalize a vendor name for consistent matching.
+
+    Strips protocol, www prefix, trailing slashes, and lowercases.
+    Examples:
+        "https://www.Bitrefill.com/" -> "bitrefill.com"
+        "WWW.BITREFILL.COM" -> "bitrefill.com"
+        "bitrefill.com" -> "bitrefill.com"
+    """
+    v = name.strip().lower()
+    # Strip protocol
+    for prefix in ("https://", "http://"):
+        if v.startswith(prefix):
+            v = v[len(prefix):]
+            break
+    # Strip www. prefix
+    if v.startswith("www."):
+        v = v[4:]
+    # Strip trailing slash
+    v = v.rstrip("/")
+    return v
 
 
 def parse_since(since: str) -> float:
@@ -32,6 +57,27 @@ def parse_since(since: str) -> float:
             return now - 86400
 
 
+# Per-type similarity thresholds for dedup
+_DEDUP_THRESHOLDS: dict[str, float] = {
+    "transaction": 0.85,  # higher — different amounts should not dedup
+    "vendor": 0.80,
+    "general": 0.80,
+    "preference": 0.80,
+    "error": 0.70,  # errors often restate the same issue differently
+    "decision": 0.80,
+}
+_DEDUP_DEFAULT_THRESHOLD = 0.80
+
+
+def _jaccard(text_a: str, text_b: str, min_word_len: int = 3) -> float:
+    """Compute Jaccard similarity on word sets (words >= min_word_len chars)."""
+    words_a = {re.sub(r"[^\w]", "", w) for w in text_a.lower().split() if len(w) >= min_word_len}
+    words_b = {re.sub(r"[^\w]", "", w) for w in text_b.lower().split() if len(w) >= min_word_len}
+    if not words_a or not words_b:
+        return 0.0
+    return len(words_a & words_b) / len(words_a | words_b)
+
+
 class MemoryEngine:
     """Lightweight memory engine backed by SQLite with Nostr identity."""
 
@@ -51,8 +97,18 @@ class MemoryEngine:
     ) -> dict[str, Any]:
         """Store a memory. Returns the stored memory record.
 
+        Deduplicates against recent memories of the same type using
+        Jaccard word-set similarity. If a near-duplicate exists,
+        returns the existing memory with a ``dedup`` flag.
+
         Types: general, transaction, vendor, preference, error, decision
         """
+        # Check for near-duplicate before storing
+        existing = self._find_duplicate(content, memory_type, metadata)
+        if existing is not None:
+            existing["dedup"] = True
+            return existing
+
         memory_id = self._generate_id(content)
         meta = metadata or {}
         meta["agent_pubkey"] = self.identity.public_key_hex
@@ -65,6 +121,15 @@ class MemoryEngine:
             metadata=meta,
         )
 
+        # Generate and store embedding (non-blocking — failure doesn't affect store)
+        try:
+            from .embedding import has_embeddings, generate_embedding
+            if has_embeddings():
+                vec = generate_embedding(content)
+                db.store_embedding(self.conn, memory_id, vec)
+        except Exception:
+            pass  # Embedding failure should never block memory storage
+
         return result
 
     def query(
@@ -73,15 +138,64 @@ class MemoryEngine:
         limit: int = 10,
         memory_type: str | None = None,
     ) -> list[dict[str, Any]]:
-        """Query memories by relevance. Uses FTS5 BM25 ranking.
+        """Query memories by relevance.
 
-        Falls back to substring match if FTS5 query fails (e.g. special characters).
+        When embeddings are available, runs both FTS5 keyword search and
+        cosine similarity search, then merges results by rank fusion.
+        Falls back to FTS5-only (or substring match) when embeddings are unavailable.
         """
+        # FTS5 keyword results
         try:
-            results = db.query_memories(self.conn, query, limit, memory_type)
+            fts_results = db.query_memories(self.conn, query, limit, memory_type)
         except Exception:
-            # Fallback: simple LIKE query for robustness
-            results = self._fallback_query(query, limit, memory_type)
+            fts_results = self._fallback_query(query, limit, memory_type)
+
+        # Try semantic search if embeddings are available
+        try:
+            from .embedding import has_embeddings, generate_embedding
+            if has_embeddings():
+                query_vec = generate_embedding(query)
+                sem_results = db.query_by_embedding(
+                    self.conn, query_vec, limit, memory_type,
+                )
+                return self._merge_results(fts_results, sem_results, limit)
+        except Exception:
+            pass  # Fall through to FTS5-only results
+
+        return fts_results
+
+    @staticmethod
+    def _merge_results(
+        fts_results: list[dict[str, Any]],
+        sem_results: list[dict[str, Any]],
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        """Merge FTS5 and semantic results using reciprocal rank fusion."""
+        scores: dict[str, float] = {}
+        by_id: dict[str, dict[str, Any]] = {}
+
+        k = 60  # RRF constant
+
+        for rank, r in enumerate(fts_results):
+            mid = r["id"]
+            scores[mid] = scores.get(mid, 0.0) + 1.0 / (k + rank)
+            by_id[mid] = r
+
+        for rank, r in enumerate(sem_results):
+            mid = r["id"]
+            scores[mid] = scores.get(mid, 0.0) + 1.0 / (k + rank)
+            if mid not in by_id:
+                by_id[mid] = r
+
+        # Sort by fused score, highest first
+        ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+
+        results = []
+        for mid, score in ranked[:limit]:
+            entry = by_id[mid]
+            entry["relevance"] = round(score, 4)
+            results.append(entry)
+
         return results
 
     def list(
@@ -100,6 +214,45 @@ class MemoryEngine:
         since_ts = self._parse_since(since) if since else None
         return db.list_memories(self.conn, memory_type, since_ts, limit)
 
+    def edit(
+        self,
+        memory_id: str,
+        new_content: str | None = None,
+        new_metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Edit a memory's content and/or metadata.
+
+        Tracks edit history via edited_at and edit_count in metadata.
+        Returns the updated memory record or an error dict.
+        """
+        # Get current state
+        row = self.conn.execute(
+            "SELECT content, metadata FROM memories WHERE id = ?", (memory_id,)
+        ).fetchone()
+        if not row:
+            return {"error": f"Memory {memory_id} not found"}
+
+        old_content = row["content"]
+        old_meta = json.loads(row["metadata"]) if row["metadata"] else {}
+
+        # Build edit tracking metadata
+        edit_meta = new_metadata or {}
+        edit_meta["edited_at"] = time.time()
+        edit_meta["edit_count"] = old_meta.get("edit_count", 0) + 1
+
+        result = db.update_memory(
+            self.conn,
+            memory_id=memory_id,
+            content=new_content,
+            metadata=edit_meta,
+        )
+
+        if result is None:
+            return {"error": f"Memory {memory_id} not found"}
+
+        result["old_content_preview"] = old_content[:100]
+        return result
+
     def stats(self) -> dict[str, Any]:
         """Return memory statistics."""
         counts = db.count_memories(self.conn)
@@ -107,6 +260,54 @@ class MemoryEngine:
             "agent_pubkey": self.identity.public_key_hex,
             **counts,
         }
+
+    def _find_duplicate(
+        self, content: str, memory_type: str,
+        metadata: dict[str, Any] | None = None, limit: int = 100,
+    ) -> dict[str, Any] | None:
+        """Check recent memories of the same type for near-duplicates.
+
+        Uses Jaccard word similarity on content. For transaction memories,
+        also requires matching vendor and amount_sats to prevent false positives
+        on "Paid X sats to Y" patterns with different amounts.
+
+        Returns the existing memory dict if a duplicate is found, else None.
+        """
+        threshold = _DEDUP_THRESHOLDS.get(memory_type, _DEDUP_DEFAULT_THRESHOLD)
+
+        rows = self.conn.execute(
+            """SELECT id, content, type, metadata, created_at
+               FROM memories WHERE type = ?
+               ORDER BY created_at DESC LIMIT ?""",
+            (memory_type, limit),
+        ).fetchall()
+
+        for row in rows:
+            similarity = _jaccard(content, row["content"])
+            if similarity >= threshold:
+                row_meta = json.loads(row["metadata"]) if row["metadata"] else {}
+
+                # For transactions, require matching vendor + amount
+                if memory_type == "transaction" and metadata:
+                    new_vendor = metadata.get("vendor", "")
+                    new_amount = metadata.get("amount_sats")
+                    old_vendor = row_meta.get("vendor", "")
+                    old_amount = row_meta.get("amount_sats")
+                    if new_vendor and old_vendor:
+                        if normalize_vendor(new_vendor) != normalize_vendor(old_vendor):
+                            continue
+                    if new_amount is not None and old_amount is not None:
+                        if int(new_amount) != int(old_amount):
+                            continue
+
+                return {
+                    "id": row["id"],
+                    "content": row["content"],
+                    "type": row["type"],
+                    "metadata": row_meta,
+                    "created_at": row["created_at"],
+                }
+        return None
 
     def _generate_id(self, content: str) -> str:
         """Generate a deterministic ID from content + timestamp."""
