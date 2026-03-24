@@ -908,13 +908,98 @@ def gateway_manifest_main() -> None:
     print(json.dumps(manifest, indent=2))
 
 
+def _cmd_stats() -> None:
+    """Show memory statistics dashboard."""
+    engine = _get_engine()
+    stats = engine.stats()
+    intel = _get_intelligence()
+
+    print("Lightning Memory — Statistics Dashboard")
+    print("=" * 42)
+    print(f"  Agent: {stats['agent_pubkey'][:16]}...")
+    print(f"  Total memories: {stats['total']}")
+    print()
+
+    if stats["by_type"]:
+        print("  By type:")
+        for t, count in sorted(stats["by_type"].items(), key=lambda x: x[1], reverse=True):
+            print(f"    {t:20s} {count:>5}")
+    else:
+        print("  No memories stored yet.")
+    print()
+
+    # Spending summary
+    summary = intel.spending_summary("30d")
+    if summary.txn_count > 0:
+        print(f"  Spending (30d): {summary.total_sats:,} sats across {summary.txn_count} txns")
+        if summary.by_vendor:
+            print("  Top vendors:")
+            for vendor, sats in sorted(summary.by_vendor.items(), key=lambda x: x[1], reverse=True)[:5]:
+                print(f"    {vendor:30s} {sats:>8,} sats")
+    print()
+
+    # Budget rules
+    budget = _get_budget()
+    rules = budget.list_rules()
+    if rules:
+        print(f"  Budget rules: {len(rules)}")
+        for r in rules:
+            limits = []
+            if r.max_sats_per_txn:
+                limits.append(f"{r.max_sats_per_txn}/txn")
+            if r.max_sats_per_day:
+                limits.append(f"{r.max_sats_per_day}/day")
+            if r.max_sats_per_month:
+                limits.append(f"{r.max_sats_per_month}/mo")
+            print(f"    {r.vendor:30s} {', '.join(limits)}")
+
+    # Embedding status
+    try:
+        from .embedding import has_embeddings, get_embedding_info
+        info = get_embedding_info()
+        status = "active" if info["model_loaded"] else ("available" if info["available"] else "not installed")
+        print(f"\n  Semantic search: {status}")
+    except Exception:
+        print("\n  Semantic search: not installed")
+
+
+def _cmd_export(fmt: str = "json") -> None:
+    """Export memories to JSON or CSV."""
+    import csv
+    import io
+
+    engine = _get_engine()
+    memories = engine.list(limit=10000)
+
+    if fmt == "csv":
+        output = io.StringIO()
+        if memories:
+            fields = ["id", "content", "type", "created_at"]
+            writer = csv.DictWriter(output, fieldnames=fields, extrasaction="ignore")
+            writer.writeheader()
+            for m in memories:
+                writer.writerow(m)
+        print(output.getvalue(), end="")
+    else:
+        print(json.dumps(memories, indent=2, default=str))
+
+
 def main():
     """Run the MCP server, or a CLI subcommand."""
     import sys
 
-    if len(sys.argv) > 1 and sys.argv[1] == "relay-status":
-        _cmd_relay_status()
-        return
+    if len(sys.argv) > 1:
+        cmd = sys.argv[1]
+        if cmd == "relay-status":
+            _cmd_relay_status()
+            return
+        elif cmd == "stats":
+            _cmd_stats()
+            return
+        elif cmd == "export":
+            fmt = sys.argv[2] if len(sys.argv) > 2 else "json"
+            _cmd_export(fmt)
+            return
 
     mcp.run()
 

@@ -279,6 +279,19 @@ ln_remote_query(
 # → {status: "success", data: {count: 3, memories: [...]}}
 ```
 
+### `memory_edit`
+
+Edit an existing memory's content or metadata. Tracks edit history.
+
+```
+memory_edit(
+  id="7222215a5eba8547",
+  content="Bitrefill now charges 300 sats (was 500)",
+  metadata='{"note": "price updated March 2026"}'
+)
+# → {id: "7222...", content: "...", old_content_preview: "...", edit_count: 1}
+```
+
 ### `memory_sync`
 
 Sync memories with Nostr relays (push and/or pull). Also pulls NIP-85 trust assertions and gateway announcements.
@@ -429,11 +442,84 @@ Generate a `.well-known/lightning-memory.json` manifest for DNS-based gateway di
 lightning-memory-manifest > .well-known/lightning-memory.json
 ```
 
+### `lightning-memory stats`
+
+Show a memory statistics dashboard:
+
+```bash
+lightning-memory stats
+# Lightning Memory — Statistics Dashboard
+# ==========================================
+#   Agent: 7222215a5eba8547...
+#   Total memories: 147
+#
+#   By type:
+#     transaction              89
+#     vendor                   23
+#     decision                 18
+#     error                    12
+#     attestation               5
+#
+#   Spending (30d): 42,500 sats across 89 txns
+#   Top vendors:
+#     bitrefill.com                    15,200 sats
+#     openai.l402.io                    8,300 sats
+#
+#   Semantic search: active
+```
+
+### `lightning-memory export [json|csv]`
+
+Export memories to JSON or CSV:
+
+```bash
+lightning-memory export json > backup.json
+lightning-memory export csv > backup.csv
+```
+
+## Relay Configuration
+
+Memories sync to Nostr relays via NIP-78 events. Default relays:
+
+```json
+["wss://relay.damus.io", "wss://nos.lol", "wss://relay.nostr.band"]
+```
+
+To customize, create `~/.lightning-memory/config.json`:
+
+```json
+{
+  "relays": [
+    "wss://relay.damus.io",
+    "wss://nos.lol",
+    "wss://relay.nostr.band",
+    "wss://relay.primal.net"
+  ],
+  "sync_timeout_seconds": 30,
+  "max_events_per_sync": 500
+}
+```
+
+**Choosing relays:**
+
+| Relay | Speed | Reliability | Notes |
+|-------|-------|-------------|-------|
+| `wss://relay.damus.io` | Fast | High | Most popular, good uptime |
+| `wss://nos.lol` | Fast | High | Reliable, good NIP-78 support |
+| `wss://relay.nostr.band` | Medium | Medium | Search-focused, may be slow |
+| `wss://relay.primal.net` | Fast | High | Primal's relay, well-maintained |
+| `wss://nostr.wine` | Fast | High | Paid relay, less spam |
+
+**Tips:**
+- Use 2-3 relays for redundancy — Lightning Memory deduplicates across relays
+- Check relay health: `lightning-memory relay-status`
+- Relays with a circuit breaker tripped are automatically skipped until they recover
+
 ## How It Works
 
 1. **First run**: A Nostr keypair is generated and stored at `~/.lightning-memory/keys/`
 2. **Storing**: Memories go to local SQLite with FTS5 indexing. Each memory is tagged with your agent's public key.
-3. **Querying**: Full-text search with BM25 ranking returns the most relevant memories.
+3. **Querying**: Full-text search with BM25 ranking returns the most relevant memories. With `pip install lightning-memory[semantic]`, queries also use ONNX-based semantic similarity for concept matching.
 4. **Identity**: Your agent's public key is a globally unique, cryptographically verifiable identifier. No accounts needed.
 
 ## Data Storage
@@ -458,6 +544,7 @@ All data is stored locally:
 - [x] Phase 5.1: Community reputation — live NIP-85 trust attestation sync
 - [x] Phase 5.2: Compliance integration — KYA attestations, LNURL-auth sessions, compliance reports
 - [x] Phase 6: Memory marketplace — gateway discovery (Nostr + DNS), remote L402 queries, gateway client
+- [x] Phase 7: Agent reliability — vendor normalization, deduplication, memory edit, semantic search, circuit breakers, L402 idempotency
 
 ## Star History
 

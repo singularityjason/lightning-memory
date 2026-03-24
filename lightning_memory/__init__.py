@@ -1,3 +1,3 @@
 """Lightning Memory: Decentralized agent memory for the Lightning economy."""
 
-__version__ = "0.6.0"
+__version__ = "0.7.0"
