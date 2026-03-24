@@ -17,36 +17,35 @@ def test_operation_map_covers_all_operations():
     assert set(OPERATION_MAP.keys()) == expected
 
 
-def test_info_returns_gateway_info():
-    """info() should fetch /info endpoint."""
-    client = GatewayClient(
+def _make_client():
+    return GatewayClient(
         url="https://gw.example.com",
         phoenixd_url="http://localhost:9740",
         phoenixd_password="test",
     )
+
+
+def test_info_returns_gateway_info():
+    """info() should fetch /info endpoint."""
+    gw = _make_client()
     mock_response = MagicMock()
     mock_response.status_code = 200
     mock_response.json.return_value = {"service": "lightning-memory-gateway", "version": "0.6.0"}
     mock_response.raise_for_status = MagicMock()
 
-    with patch("lightning_memory.client.httpx") as mock_httpx:
-        mock_http_client = MagicMock()
-        mock_httpx.Client.return_value.__enter__ = MagicMock(return_value=mock_http_client)
-        mock_httpx.Client.return_value.__exit__ = MagicMock(return_value=False)
-        mock_http_client.get.return_value = mock_response
+    mock_http = MagicMock()
+    mock_http.get.return_value = mock_response
+    mock_http.is_closed = False
 
-        result = client.info()
+    with patch.object(gw, "_get_client", return_value=mock_http):
+        result = gw.info()
 
     assert result["service"] == "lightning-memory-gateway"
 
 
 def test_discover_via_url():
     """discover_via_url should fetch .well-known/lightning-memory.json."""
-    client = GatewayClient(
-        url="https://gw.example.com",
-        phoenixd_url="http://localhost:9740",
-        phoenixd_password="test",
-    )
+    gw = _make_client()
     manifest = {
         "agent_pubkey": "abcd" * 16,
         "gateway_url": "https://gw.example.com",
@@ -59,16 +58,15 @@ def test_discover_via_url():
     mock_response.json.return_value = manifest
     mock_response.raise_for_status = MagicMock()
 
-    with patch("lightning_memory.client.httpx") as mock_httpx:
-        mock_http_client = MagicMock()
-        mock_httpx.Client.return_value.__enter__ = MagicMock(return_value=mock_http_client)
-        mock_httpx.Client.return_value.__exit__ = MagicMock(return_value=False)
-        mock_http_client.get.return_value = mock_response
+    mock_http = MagicMock()
+    mock_http.get.return_value = mock_response
+    mock_http.is_closed = False
 
-        result = client.discover_via_url("https://remote.example.com")
+    with patch.object(gw, "_get_client", return_value=mock_http):
+        result = gw.discover_via_url("https://remote.example.com")
 
     assert result["agent_pubkey"] == "abcd" * 16
-    mock_http_client.get.assert_called_once_with(
+    mock_http.get.assert_called_once_with(
         "https://remote.example.com/.well-known/lightning-memory.json",
         timeout=30,
     )
@@ -76,7 +74,7 @@ def test_discover_via_url():
 
 def test_query_full_l402_flow():
     """query() should handle the full 402 -> pay -> retry flow."""
-    client = GatewayClient(
+    gw = GatewayClient(
         url="https://gw.example.com",
         phoenixd_url="http://localhost:9740",
         phoenixd_password="testpw",
@@ -99,25 +97,28 @@ def test_query_full_l402_flow():
     resp_200.status_code = 200
     resp_200.json.return_value = {"count": 1, "memories": [{"content": "test"}]}
 
-    with patch("lightning_memory.client.httpx") as mock_httpx:
-        mock_http_client = MagicMock()
-        mock_httpx.Client.return_value.__enter__ = MagicMock(return_value=mock_http_client)
-        mock_httpx.Client.return_value.__exit__ = MagicMock(return_value=False)
-        mock_http_client.get.side_effect = [resp_402, resp_200]
-        mock_http_client.post.return_value = pay_resp
+    mock_http = MagicMock()
+    mock_http.get.side_effect = [resp_402, resp_200]
+    mock_http.post.return_value = pay_resp
+    mock_http.is_closed = False
 
-        result = client.query("memory_query", {"query": "test", "limit": 5})
+    with patch.object(gw, "_get_client", return_value=mock_http):
+        result = gw.query("memory_query", {"query": "test", "limit": 5})
 
     assert result["count"] == 1
-    mock_http_client.post.assert_called_once()
+    mock_http.post.assert_called_once()
 
 
 def test_query_invalid_operation():
     """query() should reject unknown operations."""
-    client = GatewayClient(
-        url="https://gw.example.com",
-        phoenixd_url="http://localhost:9740",
-        phoenixd_password="test",
-    )
+    gw = _make_client()
     with pytest.raises(ValueError, match="Unknown operation"):
-        client.query("bogus_operation", {})
+        gw.query("bogus_operation", {})
+
+
+def test_context_manager():
+    """GatewayClient should work as a context manager."""
+    with GatewayClient(url="https://gw.example.com") as gw:
+        assert gw.url == "https://gw.example.com"
+    # After exit, client should be cleaned up
+    assert gw._client is None

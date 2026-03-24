@@ -27,6 +27,7 @@ dependencies = [
 crypto = ["secp256k1>=0.14.0"]
 sync = ["websockets>=12.0", "secp256k1>=0.14.0"]
 gateway = ["starlette>=0.40", "uvicorn>=0.30", "httpx>=0.27"]
+semantic = ["onnxruntime>=1.16", "tokenizers>=0.15", "numpy>=1.24", "huggingface-hub>=0.20"]
 dev = [
     "pytest",
     "pytest-asyncio",
