@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lightning Memory Demo</title>
+<link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #050505;
+    --surface: #0c0c0c;
+    --surface-2: #131313;
+    --border: #1c1c1c;
+    --border-light: #252525;
+    --text: #e8e8e8;
+    --text-dim: #777;
+    --text-muted: #555;
+    --orange: #F7931A;
+    --orange-soft: #F7931A22;
+    --red: #ff3b30;
+    --red-soft: #ff3b3018;
+    --green: #32d74b;
+    --green-soft: #32d74b18;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Open Sans', -apple-system, sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    overflow: hidden;
+  }
+
+  /* ── Layout ─────────────────────────────────── */
+  .stage {
+    display: flex;
+    gap: 56px;
+    align-items: center;
+    max-width: 1200px;
+    padding: 40px;
+    width: 100%;
+  }
+
+  /* ── Phone ──────────────────────────────────── */
+  .phone {
+    width: 340px;
+    min-width: 340px;
+    height: 700px;
+    background: var(--surface);
+    border-radius: 44px;
+    border: 2.5px solid #1a1a1a;
+    overflow: hidden;
+    position: relative;
+    box-shadow:
+      0 0 0 1px rgba(255,255,255,0.03),
+      0 30px 100px rgba(0,0,0,0.7),
+      inset 0 1px 0 rgba(255,255,255,0.04);
+  }
+
+  .phone-notch {
+    width: 126px;
+    height: 32px;
+    background: var(--bg);
+    border-radius: 0 0 20px 20px;
+    margin: 0 auto;
+    position: relative;
+    z-index: 10;
+  }
+
+  .phone-screen {
+    padding: 4px 18px 18px;
+    height: calc(100% - 32px);
+    overflow-y: auto;
+    scrollbar-width: none;
+  }
+  .phone-screen::-webkit-scrollbar { display: none; }
+
+  /* ── App header ─────────────────────────────── */
+  .app-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 0 14px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 14px;
+  }
+
+  .app-bar .bolt {
+    font-size: 18px;
+    line-height: 1;
+  }
+
+  .app-bar .app-name {
+    font-family: 'Open Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--orange);
+    letter-spacing: -0.02em;
+  }
+
+  .app-bar .badge {
+    margin-left: auto;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    font-weight: 600;
+    color: var(--text-muted);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    padding: 2px 8px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  /* ── Chat feed ──────────────────────────────── */
+  .feed { display: flex; flex-direction: column; gap: 8px; }
+
+  .bubble {
+    padding: 10px 14px;
+    border-radius: 14px;
+    font-size: 13px;
+    line-height: 1.55;
+    opacity: 0;
+    transform: translateY(10px);
+    animation: fadeUp 0.3s ease forwards;
+  }
+
+  @keyframes fadeUp {
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Bubble types */
+  .bubble.agent {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    align-self: flex-start;
+    max-width: 94%;
+    border-bottom-left-radius: 4px;
+  }
+
+  .bubble.sys {
+    align-self: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-dim);
+    background: transparent;
+    border: 1px solid var(--border);
+    padding: 6px 14px;
+    border-radius: 20px;
+  }
+
+  .bubble.tx {
+    align-self: flex-start;
+    max-width: 94%;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-bottom-left-radius: 4px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+  }
+
+  .bubble.tx .tx-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    flex-shrink: 0;
+    background: var(--orange-soft);
+  }
+
+  .bubble.tx .tx-body { flex: 1; min-width: 0; }
+
+  .bubble.tx .tx-vendor {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .bubble.tx .tx-desc {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 1px;
+  }
+
+  .bubble.tx .tx-amount {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+    font-size: 13px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .bubble.tx .tx-amount.ok { color: var(--orange); }
+  .bubble.tx .tx-amount.bad { color: var(--red); }
+  .bubble.tx .tx-amount.good { color: var(--green); }
+
+  /* Alert bubble */
+  .bubble.alert {
+    align-self: stretch;
+    background: linear-gradient(135deg, #180808, var(--surface));
+    border: 1px solid #ff3b3025;
+    text-align: center;
+    padding: 14px;
+  }
+
+  .bubble.alert .alert-amount {
+    font-family: 'Open Sans', sans-serif;
+    font-size: 28px;
+    font-weight: 800;
+    color: var(--red);
+    letter-spacing: -0.03em;
+  }
+
+  .bubble.alert .alert-sub {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 4px;
+  }
+
+  /* Rug pull glow */
+  @keyframes pulseRed {
+    0%, 100% { border-color: #ff3b3025; box-shadow: 0 0 15px #ff3b3010; }
+    50% { border-color: #ff3b3050; box-shadow: 0 0 30px #ff3b3020; }
+  }
+  .bubble.alert.glow { animation: pulseRed 2s ease infinite; }
+
+  /* Gate card */
+  .bubble.gate {
+    align-self: stretch;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    padding: 12px 14px;
+  }
+
+  .gate-label {
+    font-family: 'Open Sans', sans-serif;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--orange);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-bottom: 8px;
+  }
+
+  .gate-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    padding: 3px 0;
+    color: var(--text-dim);
+  }
+
+  .gate-row .gi { font-size: 13px; width: 16px; text-align: center; }
+  .gate-row strong { color: var(--text); font-weight: 500; }
+
+  .gate-verdict {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+    text-align: center;
+  }
+
+  .pill {
+    display: inline-block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 16px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .pill.reject { color: var(--red); background: var(--red-soft); border: 1px solid var(--red); }
+  .pill.approve { color: var(--green); background: var(--green-soft); border: 1px solid var(--green); }
+  .pill.earn { color: var(--orange); background: var(--orange-soft); border: 1px solid var(--orange); }
+
+  /* Merchant earn bubble */
+  .bubble.earn {
+    align-self: stretch;
+    background: linear-gradient(135deg, #1a1208, var(--surface));
+    border: 1px solid #F7931A25;
+    text-align: center;
+    padding: 14px;
+  }
+
+  .bubble.earn .earn-amount {
+    font-family: 'Open Sans', sans-serif;
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--orange);
+  }
+
+  .bubble.earn .earn-sub {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-top: 2px;
+  }
+
+  /* Community trust card */
+  .trust-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 0;
+    font-size: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .trust-row:last-child { border-bottom: none; }
+  .trust-vendor { flex: 1; font-weight: 600; color: var(--text); }
+  .trust-score { font-family: 'JetBrains Mono', monospace; font-weight: 500; }
+  .trust-agents { font-size: 10px; color: var(--text-muted); }
+
+  /* Success bubble */
+  .bubble.win {
+    align-self: stretch;
+    background: linear-gradient(135deg, #081a0b, var(--surface));
+    border: 1px solid #32d74b25;
+    text-align: center;
+    padding: 14px;
+  }
+
+  .bubble.win .win-amount {
+    font-family: 'Open Sans', sans-serif;
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--green);
+  }
+
+  .bubble.win .win-sub {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-top: 2px;
+  }
+
+  /* Reputation card */
+  .rep-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px 12px;
+    margin-top: 8px;
+    font-size: 12px;
+  }
+
+  .rep-grid .rk { color: var(--text-muted); }
+  .rep-grid .rv { font-family: 'JetBrains Mono', monospace; font-weight: 500; text-align: right; }
+
+  .rep-bar {
+    grid-column: 1 / -1;
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    margin-top: 4px;
+    overflow: hidden;
+  }
+
+  .rep-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: var(--green);
+    transition: width 0.6s ease;
+  }
+
+  /* ── Narration panel ────────────────────────── */
+  .narration {
+    flex: 1;
+    max-width: 520px;
+  }
+
+  .scene-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--orange);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-bottom: 12px;
+    opacity: 0;
+    transition: opacity 0.4s;
+  }
+
+  .scene-tag.on { opacity: 1; }
+
+  .narration h2 {
+    font-family: 'Open Sans', sans-serif;
+    font-size: 34px;
+    font-weight: 800;
+    line-height: 1.2;
+    letter-spacing: -0.02em;
+    margin-bottom: 16px;
+    color: #fff;
+  }
+
+  .narration h2 .acc { color: var(--orange); }
+
+  .narration .desc {
+    font-size: 17px;
+    line-height: 1.65;
+    color: var(--text-dim);
+    min-height: 60px;
+  }
+
+  .narration .links {
+    margin-top: 36px;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    opacity: 0;
+    transition: opacity 0.5s;
+  }
+
+  .narration .links.on { opacity: 1; }
+
+  .narration .links .install-cmd {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: var(--orange);
+    background: var(--orange-soft);
+    padding: 10px 18px;
+    border-radius: 8px;
+    border: 1px solid #F7931A30;
+  }
+
+  .narration .links a {
+    font-size: 13px;
+    color: var(--text-dim);
+    text-decoration: none;
+    padding: 10px 16px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    transition: color 0.15s, border-color 0.15s;
+  }
+
+  .narration .links a:hover { color: var(--text); border-color: var(--border-light); }
+
+  /* ── Controls ───────────────────────────────── */
+  .controls {
+    position: fixed;
+    bottom: 28px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    z-index: 100;
+  }
+
+  .controls button {
+    font-family: 'Open Sans', sans-serif;
+    font-weight: 600;
+    font-size: 14px;
+    padding: 10px 28px;
+    border-radius: 8px;
+    cursor: pointer;
+    border: none;
+    transition: all 0.15s;
+  }
+
+  .next-btn {
+    background: var(--orange);
+    color: #000;
+  }
+
+  .next-btn:hover { background: #ffaa33; }
+  .next-btn:disabled { opacity: 0.35; cursor: default; }
+
+  .reset-btn {
+    background: var(--surface-2);
+    color: var(--text-muted);
+    border: 1px solid var(--border) !important;
+  }
+
+  .reset-btn:hover { color: var(--text); }
+
+  .step-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  /* ── Typing dots ────────────────────────────── */
+  .dots {
+    display: flex;
+    gap: 4px;
+    padding: 12px 14px;
+    align-self: flex-start;
+  }
+
+  .dots span {
+    width: 5px; height: 5px;
+    background: #444;
+    border-radius: 50%;
+    animation: dot 1.2s infinite;
+  }
+
+  .dots span:nth-child(2) { animation-delay: 0.2s; }
+  .dots span:nth-child(3) { animation-delay: 0.4s; }
+
+  @keyframes dot {
+    0%, 60%, 100% { opacity: 0.25; }
+    30% { opacity: 1; }
+  }
+</style>
+</head>
+<body>
+
+<div class="stage">
+  <!-- Phone -->
+  <div class="phone">
+    <div class="phone-notch"></div>
+    <div class="phone-screen" id="screen">
+      <div class="app-bar">
+        <span class="bolt">&#9889;</span>
+        <span class="app-name">Lightning Memory</span>
+        <span class="badge">MCP Agent</span>
+      </div>
+      <div class="feed" id="feed">
+        <div id="welcomeState" style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:60px 20px 40px;gap:16px;">
+          <div style="font-size:48px;line-height:1;">&#9889;</div>
+          <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:var(--orange);letter-spacing:-0.02em;">Lightning Memory</div>
+          <div style="font-size:13px;color:var(--text-dim);line-height:1.6;">22 MCP tools for agent memory,<br>vendor reputation, and payment safety<br>in the Lightning economy.</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-muted);margin-top:8px;padding:6px 14px;border:1px solid var(--border);border-radius:20px;">Press Start to begin demo</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Narration -->
+  <div class="narration">
+    <div class="scene-tag" id="tag"></div>
+    <h2 id="headline">Your agent has a <span class="acc">wallet</span>.<br>But it has <span class="acc">amnesia</span>.</h2>
+    <div class="desc" id="desc">AI agents can now pay for APIs and data using Bitcoin's Lightning Network — instant, global, no accounts needed. But they forget everything between sessions. They don't remember what they paid, who's reliable, or what a fair price looks like.</div>
+    <div class="links" id="links">
+      <div class="install-cmd">pip install lightning-memory</div>
+      <a href="https://github.com/singularityjason/lightning-memory" target="_blank">GitHub</a>
+      <a href="https://pypi.org/project/lightning-memory/" target="_blank">PyPI</a>
+    </div>
+  </div>
+</div>
+
+<div class="controls">
+  <span class="step-num" id="stepNum">0 / 5</span>
+  <button class="next-btn" id="nextBtn" onclick="go()">Start</button>
+  <button class="reset-btn" onclick="restart()">Reset</button>
+</div>
+
+<script>
+const feed = document.getElementById('feed');
+const screen = document.getElementById('screen');
+const tag = document.getElementById('tag');
+const headline = document.getElementById('headline');
+const desc = document.getElementById('desc');
+const links = document.getElementById('links');
+const stepNum = document.getElementById('stepNum');
+const nextBtn = document.getElementById('nextBtn');
+
+let step = 0, busy = false;
+
+const wait = ms => new Promise(r => setTimeout(r, ms));
+const scroll = () => screen.scrollTop = screen.scrollHeight;
+
+function narrate(t, h, d) {
+  tag.textContent = t; tag.classList.add('on');
+  headline.innerHTML = h;
+  desc.textContent = d;
+}
+
+function add(cls, html) {
+  const el = document.createElement('div');
+  el.className = `bubble ${cls}`;
+  el.innerHTML = html;
+  feed.appendChild(el);
+  scroll();
+  return el;
+}
+
+function addTx(vendor, description, amount, amountCls = 'ok', iconBg = '') {
+  const el = document.createElement('div');
+  el.className = 'bubble tx';
+  el.innerHTML = `
+    <div class="tx-icon" ${iconBg ? `style="background:${iconBg}"` : ''}>&#9889;</div>
+    <div class="tx-body">
+      <div class="tx-vendor">${vendor}</div>
+      <div class="tx-desc">${description}</div>
+    </div>
+    <div class="tx-amount ${amountCls}">${amount}</div>
+  `;
+  feed.appendChild(el);
+  scroll();
+}
+
+function showDots() {
+  const el = document.createElement('div');
+  el.className = 'dots'; el.id = 'dots';
+  el.innerHTML = '<span></span><span></span><span></span>';
+  feed.appendChild(el); scroll();
+}
+
+function hideDots() {
+  const el = document.getElementById('dots');
+  if (el) el.remove();
+}
+
+// ── SCENE 1: Agent pays for Lightning data, builds reputation ──
+
+async function scene1() {
+  const ws = document.getElementById('welcomeState');
+  if (ws) ws.remove();
+
+  narrate(
+    'Scene 1 — Trust builds',
+    'Agent pays. <span class="acc">Memory</span> accumulates.',
+    'An agent monitors Lightning channel liquidity by paying L402 data APIs. Every payment is stored. Over time, the agent learns which vendors are reliable, what a fair price looks like, and how much it has spent.'
+  );
+
+  add('sys', 'Agent session started');
+  await wait(400);
+
+  showDots(); await wait(600); hideDots();
+  add('agent', 'User needs channel capacity data. Querying L402 APIs...');
+  await wait(400);
+
+  addTx('channelytics.ln', 'Channel capacity snapshot', '100 sats');
+  await wait(400);
+  addTx('channelytics.ln', 'Top routing nodes by volume', '100 sats');
+  await wait(400);
+  addTx('gossip.ln', 'Network gossip feed (24h)', '80 sats');
+  await wait(400);
+  addTx('fees.market', 'Fee rate estimates by route', '120 sats');
+
+  await wait(500);
+  showDots(); await wait(500); hideDots();
+
+  add('agent', `Vendor check: <strong style="color:var(--orange)">channelytics.ln</strong>
+    <div class="rep-grid">
+      <span class="rk">Transactions</span><span class="rv">2</span>
+      <span class="rk">Avg price</span><span class="rv">100 sats</span>
+      <span class="rk">Success</span><span class="rv" style="color:var(--green)">100%</span>
+      <div class="rep-bar"><div class="rep-bar-fill" style="width:100%"></div></div>
+    </div>`);
+
+  await wait(300);
+  add('sys', '4 payments stored. Reputation tracking active.');
+}
+
+// ── SCENE 2: The price spike ────────────────────────
+
+async function scene2() {
+  narrate(
+    'Scene 2 — The price spike',
+    'Same vendor. <span style="color:var(--red)">50x</span> the price.',
+    'channelytics.ln sends an invoice for 5,000 sats instead of 100. Maybe new pricing, maybe a compromised endpoint. Without memory, an agent pays blindly. With Lightning Memory, the pre-flight gate catches it.'
+  );
+
+  showDots(); await wait(600); hideDots();
+  add('agent', 'Need a fresh capacity snapshot. Requesting invoice from channelytics.ln...');
+
+  await wait(700);
+
+  add('alert glow', `
+    <div class="alert-amount">5,000 sats</div>
+    <div class="alert-sub">channelytics.ln is requesting <strong style="color:var(--red)">50x</strong> the normal price</div>
+  `);
+
+  await wait(900);
+  add('sys', 'Running pre-flight checks...');
+  await wait(500);
+
+  add('gate', `
+    <div class="gate-label">Pre-flight Gate</div>
+    <div class="gate-row"><span class="gi">&#10060;</span> <strong>Anomaly</strong> — 5,000 vs 100 avg = <span style="color:var(--red)">50x spike</span></div>
+    <div class="gate-row"><span class="gi">&#10060;</span> <strong>Budget</strong> — exceeds 200 sats/txn limit</div>
+    <div class="gate-row"><span class="gi">&#9989;</span> <strong>History</strong> — vendor was reliable (2 prior txns)</div>
+    <div class="gate-verdict"><span class="pill reject">Blocked</span></div>
+  `);
+
+  await wait(700);
+
+  add('win', `
+    <div class="win-amount">5,000 sats saved</div>
+    <div class="win-sub">Payment blocked. Agent memory caught the anomaly.</div>
+  `);
+}
+
+// ── SCENE 3: The Sovereign Choice ─────────────────────
+
+async function scene3() {
+  narrate(
+    'Scene 3 — The sovereign choice',
+    'Route around <span style="color:var(--red)">bad actors</span>.',
+    "The agent doesn't just block bad payments — it finds better alternatives. Community trust attestations from other agents (synced via Nostr relays) reveal who's reliable."
+  );
+
+  showDots(); await wait(600); hideDots();
+  add('agent', 'channelytics.ln is compromised. Checking community trust for alternatives...');
+
+  await wait(500);
+  add('sys', 'Pulled 23 NIP-85 trust attestations from 3 relays');
+  await wait(400);
+
+  // Community trust comparison
+  add('gate', `
+    <div class="gate-label">Community Trust Scores</div>
+    <div class="trust-row">
+      <span style="font-size:13px;color:var(--red)">&#10060;</span>
+      <span class="trust-vendor" style="color:var(--red);text-decoration:line-through">channelytics.ln</span>
+      <span class="trust-score" style="color:var(--red)">0.41</span>
+      <span class="trust-agents">3 agents</span>
+    </div>
+    <div class="trust-row">
+      <span style="font-size:13px;color:var(--green)">&#9989;</span>
+      <span class="trust-vendor">nodewatch.ln</span>
+      <span class="trust-score" style="color:var(--green)">0.92</span>
+      <span class="trust-agents">15 agents</span>
+    </div>
+    <div class="trust-row">
+      <span style="font-size:13px;color:var(--green)">&#9989;</span>
+      <span class="trust-vendor">lnrouter.app</span>
+      <span class="trust-score" style="color:var(--green)">0.88</span>
+      <span class="trust-agents">9 agents</span>
+    </div>
+  `);
+
+  await wait(700);
+  showDots(); await wait(400); hideDots();
+
+  addTx('nodewatch.ln', 'Channel capacity snapshot', '90 sats', 'good');
+  await wait(300);
+  add('agent', 'Switched to <strong style="color:var(--green)">nodewatch.ln</strong> — community score 0.92 from 15 agents, 90 sats (10% cheaper). Memory doesn\'t just protect. It finds better options.');
+}
+
+// ── SCENE 4: The Merchant ───────────────────────────────
+
+async function scene4() {
+  narrate(
+    'Scene 4 — The merchant',
+    'Sell what you <span class="acc">know</span>.',
+    "Your agent's experience is valuable. Open an L402 gateway and other agents pay sats to query your vendor intelligence. Knowledge becomes an asset, earning while you sleep."
+  );
+
+  add('sys', 'L402 gateway started on port 8402');
+  await wait(500);
+
+  showDots(); await wait(600); hideDots();
+  add('agent', 'Gateway live. Other agents can query my vendor reputation data via L402 micropayments.');
+
+  await wait(500);
+
+  // Incoming queries
+  addTx('agent-0xf3a1', 'Queried: vendor reputation for channelytics.ln', '+3 sats', 'good', 'var(--green-soft)');
+  await wait(400);
+  addTx('agent-0x8bc4', 'Queried: spending anomaly check', '+3 sats', 'good', 'var(--green-soft)');
+  await wait(400);
+  addTx('agent-0x21dd', 'Queried: vendor trust for nodewatch.ln', '+2 sats', 'good', 'var(--green-soft)');
+
+  await wait(600);
+
+  add('earn', `
+    <div class="earn-amount">+8 sats earned</div>
+    <div class="earn-sub">3 agents paid to access your vendor intelligence via L402</div>
+  `);
+
+  await wait(400);
+  add('agent', 'The agent economy: agents pay for data, pay for analysis, and sell what they learn. All on Lightning. No API keys, no accounts — just sats and Nostr identity.');
+}
+
+// ── SCENE 5: Closing ─────────────────────────────────
+
+async function scene5() {
+  narrate(
+    'Scene 5 — The protocol',
+    '<span class="acc">L1</span> settles. <span class="acc">L2</span> pays. <span class="acc">L3</span> remembers.',
+    "Lightning Memory is the missing memory layer for the agent economy. 22 MCP tools. Local-first SQLite. Nostr identity. L402 native. Open source, MIT licensed."
+  );
+
+  add('sys', 'Session: 5 payments, 1 blocked, 490 sats spent, 5,000 saved, 8 earned');
+  await wait(500);
+
+  showDots(); await wait(500); hideDots();
+  add('agent', `<strong>What agents get:</strong>
+    <div style="margin-top:6px;font-size:12px;color:var(--text-dim);line-height:1.7;">
+    &#9889; Persistent memory across sessions<br>
+    &#128736; Vendor reputation + anomaly detection<br>
+    &#128737; Budget enforcement + pre-flight gate<br>
+    &#127760; Community trust via Nostr relay sync<br>
+    &#128176; L402 gateway — sell your knowledge for sats<br>
+    &#128274; Sovereign identity — Nostr keypairs, no accounts
+    </div>`);
+
+  await wait(300);
+  links.classList.add('on');
+}
+
+// ── Controller ───────────────────────────────────────
+
+const scenes = [scene1, scene2, scene3, scene4, scene5];
+const btnLabels = ['The Price Spike', 'The Sovereign Choice', 'The Merchant', 'The Protocol'];
+
+async function go() {
+  if (busy || step >= scenes.length) return;
+  busy = true;
+  nextBtn.disabled = true;
+  await scenes[step]();
+  step++;
+  stepNum.textContent = `${step} / ${scenes.length}`;
+  if (step < scenes.length) {
+    nextBtn.textContent = btnLabels[step - 1];
+    nextBtn.disabled = false;
+  } else {
+    nextBtn.textContent = 'Done';
+  }
+  busy = false;
+}
+
+function restart() {
+  step = 0; busy = false;
+  feed.innerHTML = `
+    <div id="welcomeState" style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:60px 20px 40px;gap:16px;">
+      <div style="font-size:48px;line-height:1;">&#9889;</div>
+      <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:var(--orange);letter-spacing:-0.02em;">Lightning Memory</div>
+      <div style="font-size:13px;color:var(--text-dim);line-height:1.6;">22 MCP tools for agent memory,<br>vendor reputation, and payment safety<br>in the Lightning economy.</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-muted);margin-top:8px;padding:6px 14px;border:1px solid var(--border);border-radius:20px;">Press Start to begin demo</div>
+    </div>
+  `;
+  tag.textContent = ''; tag.classList.remove('on');
+  headline.innerHTML = 'Your agent has a <span class="acc">wallet</span>.<br>But it has <span class="acc">amnesia</span>.';
+  desc.textContent = "AI agents can now pay for APIs and data using Bitcoin's Lightning Network — instant, global, no accounts needed. But they forget everything between sessions. They don't remember what they paid, who's reliable, or what a fair price looks like.";
+  links.classList.remove('on');
+  nextBtn.textContent = 'Start';
+  nextBtn.disabled = false;
+  stepNum.textContent = '0 / 5';
+}
+</script>
+
+</body>
+</html>
