@@ -167,6 +167,61 @@ def test_no_price_contradiction_for_small_changes(engine):
     assert "contradictions" not in r2 or len(r2.get("contradictions", [])) == 0
 
 
+# --- Noise filtering tests ---
+
+
+def test_noise_short_content_rejected(engine):
+    """Very short content should be rejected."""
+    result = engine.store("ok")
+    assert result.get("status") == "rejected"
+    assert result.get("reason") == "noise"
+
+
+def test_noise_known_phrase_rejected(engine):
+    """Known noise phrases should be rejected."""
+    for phrase in ["got it", "thanks", "sure", "acknowledged"]:
+        result = engine.store(phrase)
+        assert result.get("status") == "rejected", f"'{phrase}' should be rejected"
+
+
+def test_noise_json_blob_rejected(engine):
+    """JSON blobs should be rejected."""
+    result = engine.store('{"key": "value", "nested": {"a": [1,2,3]}}')
+    assert result.get("status") == "rejected"
+
+
+def test_noise_valid_content_accepted(engine):
+    """Normal memory content should pass the noise filter."""
+    result = engine.store("Paid 500 sats to bitrefill for a gift card")
+    assert "status" not in result or result.get("status") != "rejected"
+
+
+# --- Recency-weighted ranking tests ---
+
+
+def test_recent_memories_rank_higher(engine):
+    """Recent memories should rank higher than old ones for same query."""
+    import time as _time
+
+    # Store two memories with same keywords but different ages
+    engine.store("bitrefill vendor is reliable for gift cards", memory_type="vendor")
+
+    # Artificially age the first memory by updating created_at
+    engine.conn.execute(
+        "UPDATE memories SET created_at = created_at - 5184000"  # 60 days ago
+    )
+    engine.conn.commit()
+
+    # Store a newer memory
+    engine.store("bitrefill vendor has new pricing for gift cards", memory_type="vendor")
+
+    results = engine.query("bitrefill vendor gift cards")
+    assert len(results) >= 2
+    # The newer memory should have higher relevance
+    relevances = [r["relevance"] for r in results]
+    assert relevances[0] >= relevances[1], "Newer memory should rank first"
+
+
 def test_contradiction_includes_existing_preview(engine):
     """Contradiction should include a preview of the conflicting memory."""
     engine.store(

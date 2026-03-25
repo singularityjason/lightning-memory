@@ -45,6 +45,25 @@ def test_normalize_already_clean():
     assert normalize_vendor("openai") == "openai"
 
 
+def test_normalize_subdomain_api():
+    assert normalize_vendor("api.openai.com") == "openai.com"
+    assert normalize_vendor("https://api.openai.com/v1") == "openai.com"
+
+
+def test_normalize_subdomain_app():
+    assert normalize_vendor("app.example.io") == "example.io"
+
+
+def test_normalize_subdomain_gateway():
+    assert normalize_vendor("gateway.bitrefill.com") == "bitrefill.com"
+    assert normalize_vendor("gw.bitrefill.com") == "bitrefill.com"
+
+
+def test_normalize_strips_path():
+    assert normalize_vendor("bitrefill.com/api/v1") == "bitrefill.com"
+    assert normalize_vendor("https://api.openai.com/v1/chat") == "openai.com"
+
+
 def test_normalize_empty():
     assert normalize_vendor("") == ""
 

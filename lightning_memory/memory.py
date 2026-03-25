@@ -16,11 +16,15 @@ from .nostr import NostrIdentity
 def normalize_vendor(name: str) -> str:
     """Normalize a vendor name for consistent matching.
 
-    Strips protocol, www prefix, trailing slashes, and lowercases.
+    Strips protocol, www/api/app subdomains, trailing slashes, paths,
+    and lowercases. Reduces to the base domain so that api.openai.com,
+    www.openai.com, and openai.com all resolve to "openai.com".
+
     Examples:
         "https://www.Bitrefill.com/" -> "bitrefill.com"
-        "WWW.BITREFILL.COM" -> "bitrefill.com"
-        "bitrefill.com" -> "bitrefill.com"
+        "api.openai.com/v1" -> "openai.com"
+        "app.example.io" -> "example.io"
+        "bitrefill" -> "bitrefill"
     """
     v = name.strip().lower()
     # Strip protocol
@@ -28,10 +32,15 @@ def normalize_vendor(name: str) -> str:
         if v.startswith(prefix):
             v = v[len(prefix):]
             break
-    # Strip www. prefix
-    if v.startswith("www."):
-        v = v[4:]
-    # Strip trailing slash
+    # Strip path (everything after first /)
+    if "/" in v:
+        v = v.split("/")[0]
+    # Strip common subdomains (www, api, app, gateway, gw)
+    for sub in ("www.", "api.", "app.", "gateway.", "gw."):
+        if v.startswith(sub):
+            v = v[len(sub):]
+            break
+    # Strip trailing slash (safety)
     v = v.rstrip("/")
     return v
 
@@ -69,6 +78,34 @@ _DEDUP_THRESHOLDS: dict[str, float] = {
 _DEDUP_DEFAULT_THRESHOLD = 0.80
 
 
+# Noise patterns that should not be stored as memories
+_NOISE_PATTERNS = {
+    "ok", "okay", "got it", "thanks", "thank you", "sure", "yes", "no",
+    "understood", "ack", "acknowledged", "noted", "done", "fine", "right",
+}
+_MIN_CONTENT_LENGTH = 3  # memories shorter than this are noise
+
+
+def _is_noise(content: str) -> bool:
+    """Check if content is too short, a known noise phrase, or a JSON blob.
+
+    Returns True if the content should be rejected.
+    """
+    stripped = content.strip()
+    if len(stripped) < _MIN_CONTENT_LENGTH:
+        return True
+    if stripped.lower().rstrip(".!") in _NOISE_PATTERNS:
+        return True
+    # Reject JSON blobs (agents sometimes dump raw API responses)
+    if stripped.startswith("{") or stripped.startswith("["):
+        try:
+            json.loads(stripped)
+            return True  # Valid JSON blob — not a natural language memory
+        except (json.JSONDecodeError, ValueError):
+            pass
+    return False
+
+
 def _jaccard(text_a: str, text_b: str, min_word_len: int = 3) -> float:
     """Compute Jaccard similarity on word sets (words >= min_word_len chars)."""
     words_a = {re.sub(r"[^\w]", "", w) for w in text_a.lower().split() if len(w) >= min_word_len}
@@ -103,6 +140,10 @@ class MemoryEngine:
 
         Types: general, transaction, vendor, preference, error, decision
         """
+        # Reject noise content
+        if _is_noise(content):
+            return {"status": "rejected", "reason": "noise", "content_preview": content[:50]}
+
         # Check for near-duplicate before storing
         existing = self._find_duplicate(content, memory_type, metadata)
         if existing is not None:

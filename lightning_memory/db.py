@@ -229,6 +229,12 @@ def query_memories(
     hit_ids = []
     for row in rows:
         hit_ids.append(row["id"])
+        bm25_score = -row["rank"]  # BM25 returns negative; negate for positive
+        # Recency decay: memories lose relevance over time
+        # Half-life of 30 days — a 60-day-old memory has 0.25x the weight
+        age_days = (now - row["created_at"]) / 86400
+        recency_weight = 0.5 ** (age_days / 30.0)
+        relevance = bm25_score * (0.3 + 0.7 * recency_weight)  # floor at 30% of original score
         results.append({
             "id": row["id"],
             "content": row["content"],
@@ -236,8 +242,11 @@ def query_memories(
             "metadata": json.loads(row["metadata"]),
             "nostr_event_id": row["nostr_event_id"],
             "created_at": format_utc(row["created_at"]),
-            "relevance": -row["rank"],  # BM25 returns negative scores; negate for intuitive ordering
+            "relevance": round(relevance, 6),
         })
+
+    # Re-sort by recency-weighted relevance
+    results.sort(key=lambda r: r["relevance"], reverse=True)
 
     # Update access tracking for returned memories
     if hit_ids:
