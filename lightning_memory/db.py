@@ -5,11 +5,26 @@ from __future__ import annotations
 import json
 import sqlite3
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 
 DEFAULT_DB_PATH = Path.home() / ".lightning-memory" / "memories.db"
+
+
+def format_utc(ts: float | None) -> str | None:
+    """Convert a Unix timestamp to ISO 8601 UTC string.
+
+    Returns None if input is None. All timestamps in Lightning Memory
+    are stored as Unix floats internally but exposed as absolute UTC
+    strings in API responses for unambiguous date handling.
+
+    Example: 1711324800.0 → "2024-03-25T00:00:00Z"
+    """
+    if ts is None:
+        return None
+    return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _get_db_path() -> Path:
@@ -170,7 +185,7 @@ def store_memory(
         "type": memory_type,
         "metadata": metadata or {},
         "nostr_event_id": nostr_event_id,
-        "created_at": now,
+        "created_at": format_utc(now),
     }
 
 
@@ -210,17 +225,36 @@ def query_memories(
         )
 
     results = []
+    now = time.time()
+    hit_ids = []
     for row in rows:
+        hit_ids.append(row["id"])
         results.append({
             "id": row["id"],
             "content": row["content"],
             "type": row["type"],
             "metadata": json.loads(row["metadata"]),
             "nostr_event_id": row["nostr_event_id"],
-            "created_at": row["created_at"],
+            "created_at": format_utc(row["created_at"]),
             "relevance": -row["rank"],  # BM25 returns negative scores; negate for intuitive ordering
         })
+
+    # Update access tracking for returned memories
+    if hit_ids:
+        _bump_access(conn, hit_ids, now)
+
     return results
+
+
+def _bump_access(conn: sqlite3.Connection, memory_ids: list[str], now: float) -> None:
+    """Increment access_count and update last_accessed_at for queried memories."""
+    for mid in memory_ids:
+        conn.execute(
+            """UPDATE memories SET access_count = COALESCE(access_count, 0) + 1,
+                   last_accessed_at = ? WHERE id = ?""",
+            (now, mid),
+        )
+    conn.commit()
 
 
 def list_memories(
@@ -259,7 +293,7 @@ def list_memories(
             "type": row["type"],
             "metadata": json.loads(row["metadata"]),
             "nostr_event_id": row["nostr_event_id"],
-            "created_at": row["created_at"],
+            "created_at": format_utc(row["created_at"]),
         }
         for row in rows
     ]
@@ -316,8 +350,8 @@ def update_memory(
         "content": new_content,
         "type": row["type"],
         "metadata": existing_meta,
-        "created_at": row["created_at"],
-        "updated_at": now,
+        "created_at": format_utc(row["created_at"]),
+        "updated_at": format_utc(now),
     }
 
 
@@ -388,9 +422,12 @@ def query_by_embedding(
             "content": row["content"],
             "type": row["type"],
             "metadata": json.loads(row["metadata"]) if row["metadata"] else {},
-            "created_at": row["created_at"],
+            "created_at": format_utc(row["created_at"]),
             "similarity": round(sim, 4),
         })
+
+    # Access tracking is handled by query_memories (FTS5 path) to avoid
+    # double-counting when hybrid search calls both paths.
     return results
 
 
@@ -433,9 +470,23 @@ def _migrate_v2_add_embeddings(conn: sqlite3.Connection) -> None:
     """)
 
 
+def _migrate_v3_add_access_tracking(conn: sqlite3.Connection) -> None:
+    """v3: Add access_count and last_accessed_at to memories for staleness tracking."""
+    # SQLite ALTER TABLE only supports adding columns one at a time
+    try:
+        conn.execute("ALTER TABLE memories ADD COLUMN access_count INTEGER DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+    try:
+        conn.execute("ALTER TABLE memories ADD COLUMN last_accessed_at REAL")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+
+
 _MIGRATIONS: dict[int, callable] = {
     1: _migrate_v1_add_used_tokens,
     2: _migrate_v2_add_embeddings,
+    3: _migrate_v3_add_access_tracking,
 }
 
 

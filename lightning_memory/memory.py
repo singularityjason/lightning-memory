@@ -130,6 +130,11 @@ class MemoryEngine:
         except Exception:
             pass  # Embedding failure should never block memory storage
 
+        # Check for contradictions with existing memories
+        contradictions = self._detect_contradictions(content, memory_type, metadata)
+        if contradictions:
+            result["contradictions"] = contradictions
+
         return result
 
     def query(
@@ -308,6 +313,98 @@ class MemoryEngine:
                     "created_at": row["created_at"],
                 }
         return None
+
+    def _detect_contradictions(
+        self,
+        content: str,
+        memory_type: str,
+        metadata: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Detect potential contradictions with existing memories.
+
+        For transaction/vendor memories with a vendor in metadata, checks
+        for conflicting information: different prices for same service,
+        contradictory reliability assessments, etc.
+
+        Returns a list of contradiction dicts with the conflicting memory
+        and a description of the conflict. Empty list if no contradictions.
+        """
+        if not metadata or not metadata.get("vendor"):
+            return []
+
+        vendor_norm = normalize_vendor(metadata["vendor"])
+        contradictions: list[dict[str, Any]] = []
+
+        # Only check relevant types
+        check_types = ("transaction", "vendor", "decision")
+        if memory_type not in check_types:
+            return []
+
+        rows = self.conn.execute(
+            """SELECT id, content, type, metadata, created_at
+               FROM memories WHERE type IN ('transaction', 'vendor', 'decision')
+               ORDER BY created_at DESC LIMIT 200""",
+        ).fetchall()
+
+        content_lower = content.lower()
+        new_amount = metadata.get("amount_sats")
+
+        # Sentiment indicators
+        positive_words = {"reliable", "fast", "good", "great", "excellent", "trustworthy", "recommended"}
+        negative_words = {"unreliable", "slow", "bad", "scam", "avoid", "terrible", "failed", "overpriced"}
+
+        new_positive = any(w in content_lower for w in positive_words)
+        new_negative = any(w in content_lower for w in negative_words)
+
+        for row in rows:
+            row_meta = json.loads(row["metadata"]) if row["metadata"] else {}
+            row_vendor = normalize_vendor(row_meta["vendor"]) if row_meta.get("vendor") else ""
+
+            if row_vendor != vendor_norm:
+                continue
+
+            row_content_lower = row["content"].lower()
+            old_amount = row_meta.get("amount_sats")
+
+            # Price contradiction: same vendor, significantly different price for same type of service
+            if (new_amount is not None and old_amount is not None
+                    and memory_type == "transaction" and row["type"] == "transaction"):
+                new_amt = int(new_amount)
+                old_amt = int(old_amount)
+                if old_amt > 0 and new_amt > 0:
+                    ratio = max(new_amt, old_amt) / min(new_amt, old_amt)
+                    if ratio >= 3.0:
+                        contradictions.append({
+                            "type": "price_change",
+                            "existing_id": row["id"],
+                            "existing_preview": row["content"][:100],
+                            "existing_created_at": db.format_utc(row["created_at"]),
+                            "detail": f"Price changed {ratio:.1f}x: was {old_amt} sats, now {new_amt} sats",
+                        })
+
+            # Sentiment contradiction: positive vs negative about same vendor
+            old_positive = any(w in row_content_lower for w in positive_words)
+            old_negative = any(w in row_content_lower for w in negative_words)
+
+            if new_positive and old_negative:
+                contradictions.append({
+                    "type": "sentiment_conflict",
+                    "existing_id": row["id"],
+                    "existing_preview": row["content"][:100],
+                    "existing_created_at": db.format_utc(row["created_at"]),
+                    "detail": f"New memory is positive but existing memory is negative about {vendor_norm}",
+                })
+            elif new_negative and old_positive:
+                contradictions.append({
+                    "type": "sentiment_conflict",
+                    "existing_id": row["id"],
+                    "existing_preview": row["content"][:100],
+                    "existing_created_at": db.format_utc(row["created_at"]),
+                    "detail": f"New memory is negative but existing memory is positive about {vendor_norm}",
+                })
+
+        # Limit to top 3 most relevant contradictions
+        return contradictions[:3]
 
     def _generate_id(self, content: str) -> str:
         """Generate a deterministic ID from content + timestamp."""
