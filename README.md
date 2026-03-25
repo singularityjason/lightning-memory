@@ -4,72 +4,40 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-Decentralized agent memory for the Lightning economy. Store, query, and recall memories with cryptographic identity (Nostr) and micropayments (Lightning/L402).
+Persistent memory for AI agents in the Lightning economy.
 
-## Why?
+## The Problem
 
-AI agents can spend sats over Lightning via L402. But they can't remember what they bought. Every session starts from zero — every vendor is a stranger, every price is accepted at face value, and lessons learned yesterday are gone today. Lightning Memory is the missing memory layer: **L1 settles. L2 pays. L3 remembers.**
+AI agents spend sats over Lightning via L402 — but they can't remember what they bought. Every session starts from zero. Every vendor is a stranger. Every price is accepted at face value. An agent that paid 500 sats yesterday doesn't know if today's 5,000 sat invoice is a price spike or normal.
 
-**[Interactive Demo](https://www.jasonsosa.com/blog/agent-lightning-memory)** — watch an agent learn, get rugged, and route around bad actors in 5 scenes.
-
-**[Building the Agent Economy](https://www.jasonsosa.com/blog/agent-economy-trust-marketplace-bitcoin-lightning)** — trust, budgets, compliance, and the memory marketplace (v0.6.0).
-
-## How It Compares
-
-| Feature | Lightning Memory | Mem0 | Raw file storage | No memory |
-|---------|:---:|:---:|:---:|:---:|
-| Lightning/L402 awareness | Yes | No | No | No |
-| Vendor reputation tracking | Yes | No | Manual | No |
-| Spending anomaly detection | Yes | No | No | No |
-| Nostr identity (BIP-340) | Yes | No | No | No |
-| Relay sync (NIP-78) | Yes | No | No | No |
-| Full-text search (FTS5) | Yes | Yes | No | No |
-| Agent-to-agent knowledge markets | Yes (L402 gateway) | No | No | No |
-| Budget enforcement | Yes | No | No | No |
-| KYC/trust profiles | Yes | No | No | No |
-| Payment pre-flight gate | Yes | No | No | No |
-| Local-first / offline | Yes | Cloud | Yes | N/A |
-| MCP native | Yes | Plugin | No | No |
-| Zero config | Yes | API key required | Manual setup | N/A |
-
-## Architecture
+## The Solution
 
 ```
-L1: Bitcoin (settlement)
-L2: Lightning Network (payments, L402)
-L3: Lightning Memory (agent memory protocol)
+L1: Bitcoin      — settles
+L2: Lightning    — pays
+L3: Lightning Memory — remembers
 ```
 
-- **Nostr identity**: Agent identity = Nostr keypair. No accounts, no API keys.
-- **Local-first**: SQLite with FTS5 full-text search. Works offline, zero dependencies.
-- **Nostr sync**: Memories written as NIP-78 events to relays. Portable, tamper-proof.
-- **L402 payments**: Pay-per-query hosted service. 1-5 sats per operation.
+Lightning Memory gives agents persistent memory, vendor intelligence, and payment safety gates. Agents learn from their spending history, track vendor reputations, detect price anomalies, enforce budgets, and share trust signals with other agents.
+
+**[Interactive Demo](https://www.jasonsosa.com/blog/agent-lightning-memory)** — watch an agent learn, get rugged, and route around bad actors.
+
+**[Building the Agent Economy](https://www.jasonsosa.com/blog/agent-economy-trust-marketplace-bitcoin-lightning)** — trust, budgets, compliance, and the memory marketplace.
+
+## Who Is This For
+
+- **Agents making L402 payments** that need vendor reputation and spending discipline
+- **Developers building autonomous agents** on Bitcoin/Lightning
+- **Anyone running an MCP-compatible AI agent** (Claude, GPT, or any MCP client)
 
 ## Quick Start
 
-### Install
-
 ```bash
 pip install lightning-memory
-```
-
-Or from source:
-
-```bash
-git clone https://github.com/singularityjason/lightning-memory
-cd lightning-memory
-pip install -e .
-```
-
-### Run as MCP Server
-
-```bash
-lightning-memory
+lightning-memory  # starts MCP server
 ```
 
 ### Configure in Claude Code
-
-Add to your MCP config (`~/.claude.json` under your project key):
 
 ```json
 {
@@ -83,8 +51,6 @@ Add to your MCP config (`~/.claude.json` under your project key):
 
 ### Configure in Claude Desktop
 
-Add to `claude_desktop_config.json`:
-
 ```json
 {
   "mcpServers": {
@@ -96,246 +62,129 @@ Add to `claude_desktop_config.json`:
 }
 ```
 
-## Tools
+## How It Compares
 
-### `memory_store`
+| Feature | Lightning Memory | Mem0 | Raw file storage | No memory |
+|---------|:---:|:---:|:---:|:---:|
+| Lightning/L402 awareness | Yes | No | No | No |
+| Vendor reputation tracking | Yes | No | Manual | No |
+| Spending anomaly detection | Yes | No | No | No |
+| Nostr identity (BIP-340) | Yes | No | No | No |
+| Relay sync (NIP-78) | Yes | No | No | No |
+| Full-text + semantic search | Yes | Yes | No | No |
+| Agent-to-agent knowledge markets | Yes (L402 gateway) | No | No | No |
+| Budget enforcement | Yes | No | No | No |
+| KYC/trust profiles | Yes | No | No | No |
+| Payment pre-flight gate | Yes | No | No | No |
+| Contradiction detection | Yes | No | No | No |
+| Local-first / offline | Yes | Cloud | Yes | N/A |
+| MCP native | Yes | Plugin | No | No |
+| Zero config | Yes | API key required | Manual setup | N/A |
 
-Store a memory for later retrieval.
+## Tools (22)
 
-```
+### Memory
+
+| Tool | Description |
+|------|-------------|
+| `memory_store` | Store a memory (transaction, vendor, preference, error, decision) |
+| `memory_query` | Search by relevance (FTS5 + optional semantic search) |
+| `memory_list` | List memories with type/time filters |
+| `memory_edit` | Edit content or metadata with audit trail |
+| `memory_sync` | Sync with Nostr relays (push/pull) |
+| `memory_export` | Export as NIP-78 Nostr events |
+
+```python
 memory_store(
-  content="Paid 500 sats to bitrefill.com for a $5 Amazon gift card via L402. Fast, reliable.",
+  content="Paid 500 sats to bitrefill.com for a $5 Amazon gift card via L402.",
   type="transaction",
   metadata='{"vendor": "bitrefill.com", "amount_sats": 500}'
 )
-```
 
-**Types:** `general`, `transaction`, `vendor`, `preference`, `error`, `decision`
-
-### `memory_query`
-
-Search memories by relevance.
-
-```
 memory_query(query="bitrefill payment history", limit=5)
+# → recency-weighted results with dedup and contradiction alerts
 ```
 
-### `memory_list`
+### Lightning Intelligence
 
-List memories with optional filters.
+| Tool | Description |
+|------|-------------|
+| `ln_vendor_reputation` | Reputation score from transaction history |
+| `ln_spending_summary` | Spending breakdown by vendor and protocol |
+| `ln_anomaly_check` | Detect if a payment is abnormally high |
 
-```
-memory_list(type="transaction", since="24h", limit=20)
-```
-
-### `ln_vendor_reputation`
-
-Check a vendor's reputation based on transaction history.
-
-```
+```python
 ln_vendor_reputation(vendor="bitrefill.com")
 # → {reputation: {total_txns: 12, success_rate: 0.92, avg_sats: 450}, recommendation: "reliable"}
-```
 
-### `ln_spending_summary`
-
-Get a spending breakdown for budget awareness.
-
-```
-ln_spending_summary(since="30d")
-# → {summary: {total_sats: 15000, by_vendor: {"bitrefill.com": 9000, ...}, txn_count: 25}}
-```
-
-### `ln_anomaly_check`
-
-Check if a proposed payment looks normal compared to history.
-
-```
 ln_anomaly_check(vendor="bitrefill.com", amount_sats=5000)
 # → {anomaly: {verdict: "high", context: "5000 sats is 11.1x the historical average..."}}
 ```
 
-### `ln_budget_set`
+### Payment Safety
 
-Set spending limits for a vendor.
+| Tool | Description |
+|------|-------------|
+| `ln_preflight` | Pre-flight gate: budget + anomaly + trust check before payment |
+| `ln_budget_set` | Set per-vendor spending limits (per txn, per day, per month) |
+| `ln_budget_check` | Check spending against limits |
+| `ln_budget_status` | Gateway earnings and L402 payment stats |
 
-```
-ln_budget_set(vendor="bitrefill.com", max_sats_per_txn=1000, max_sats_per_day=5000)
-# → {status: "set", rule: {vendor: "bitrefill.com", max_sats_per_txn: 1000, ...}}
-```
-
-### `ln_budget_check`
-
-List budget rules and current spending against limits.
-
-```
-ln_budget_check(vendor="bitrefill.com")
-# → {vendor: "bitrefill.com", has_rule: true, rule: {...}, spent_today: 350}
-```
-
-### `ln_vendor_trust`
-
-Get a vendor's full trust profile (KYC + reputation + community).
-
-```
-ln_vendor_trust(vendor="bitrefill.com")
-# → {trust: {kyc_verified: true, community_score: 0.89, attestation_count: 15, ...}}
-```
-
-### `ln_preflight`
-
-Pre-flight check before making a payment. **Use this before every payment.**
-
-```
+```python
 ln_preflight(vendor="bitrefill.com", amount_sats=500)
 # → {decision: {verdict: "approve", budget_remaining_today: 4500, trust_score: 0.89}}
+
+# If the vendor suddenly charges 50x:
+ln_preflight(vendor="bitrefill.com", amount_sats=25000)
+# → {decision: {verdict: "reject", reasons: ["exceeds daily limit of 5000 sats"]}}
 ```
 
-### `ln_trust_attest`
+### Trust & Compliance
 
-Publish a trust attestation for a vendor to Nostr relays (NIP-85).
+| Tool | Description |
+|------|-------------|
+| `ln_vendor_trust` | Full trust profile (KYC + reputation + community score) |
+| `ln_trust_attest` | Publish NIP-85 trust attestation to Nostr relays |
+| `ln_agent_attest` | Store a KYA (Know Your Agent) attestation |
+| `ln_agent_verify` | Look up an agent's compliance status |
+| `ln_auth_session` | Store LNURL-auth session records |
+| `ln_auth_lookup` | Look up LNURL-auth sessions |
+| `ln_compliance_report` | Generate structured compliance export |
 
-```
-ln_trust_attest(vendor="bitrefill.com")
-# → {status: "attested", vendor: "bitrefill.com", score: 0.85, pushed: 1}
-```
+### Marketplace
 
-Score is auto-calculated from local reputation if not provided. Other agents pull these attestations via `memory_sync` to build community trust scores.
+| Tool | Description |
+|------|-------------|
+| `ln_discover_gateways` | Find remote Lightning Memory gateways via Nostr |
+| `ln_remote_query` | Query a remote gateway via L402 micropayment |
 
-### `ln_agent_attest`
-
-Store a KYA (Know Your Agent) attestation for an agent's identity.
-
-```
-ln_agent_attest(
-  agent_pubkey="abcd1234...",
-  owner_id="jason@e1.ai",
-  jurisdiction="US",
-  compliance_level="self_declared",
-  source="manual"
-)
-# → {status: "stored", compliance_level: "self_declared"}
-```
-
-**Compliance levels:** `unknown`, `self_declared`, `kyc_verified`, `regulated_entity`
-
-### `ln_agent_verify`
-
-Look up a KYA attestation for an agent by public key.
-
-```
-ln_agent_verify(agent_pubkey="abcd1234...")
-# → {status: "verified", compliance_level: "kyc_verified", jurisdiction: "EU"}
-```
-
-### `ln_auth_session`
-
-Store or update an LNURL-auth session record for a vendor.
-
-```
-ln_auth_session(vendor="bitrefill.com", linking_key="02abc123...")
-# → {status: "stored", session_state: "active"}
-```
-
-**Session states:** `active`, `expired`, `revoked`
-
-### `ln_auth_lookup`
-
-Look up an existing LNURL-auth session for a vendor.
-
-```
-ln_auth_lookup(vendor="bitrefill.com")
-# → {has_session: true, linking_key: "02abc123...", session_state: "active"}
-```
-
-### `ln_compliance_report`
-
-Generate a structured compliance report for audit/export.
-
-```
-ln_compliance_report(since="30d")
-# → {report: {agent_identity: {...}, transactions: [...], budget_rules: [...], vendor_kyc: [...], ...}}
-```
-
-### `ln_discover_gateways`
-
-List known Lightning Memory gateways discovered via Nostr relays.
-
-```
+```python
 ln_discover_gateways(operation="memory_query")
 # → {count: 2, gateways: [{url: "https://gw1.example.com", operations: {...}}, ...]}
-```
 
-### `ln_remote_query`
-
-Query a remote gateway via L402 micropayment. Pays automatically via Phoenixd.
-
-```
 ln_remote_query(
   gateway_url="https://gw.example.com",
-  operation="memory_query",
-  params='{"query": "openai rate limits"}'
+  operation="ln_vendor_reputation",
+  params='{"vendor": "openai"}'
 )
-# → {status: "success", data: {count: 3, memories: [...]}}
+# → Pays 3 sats, returns remote agent's vendor intelligence
 ```
 
-### `memory_edit`
+## Architecture
 
-Edit an existing memory's content or metadata. Tracks edit history.
-
-```
-memory_edit(
-  id="7222215a5eba8547",
-  content="Bitrefill now charges 300 sats (was 500)",
-  metadata='{"note": "price updated March 2026"}'
-)
-# → {id: "7222...", content: "...", old_content_preview: "...", edit_count: 1}
-```
-
-### `memory_sync`
-
-Sync memories with Nostr relays (push and/or pull). Also pulls NIP-85 trust assertions and gateway announcements.
-
-```
-memory_sync(direction="both")  # "push", "pull", or "both"
-# → {pushed: 5, pulled: 3, errors: []}
-```
-
-Requires `pip install lightning-memory[sync]` for relay support.
-
-### `memory_export`
-
-Export memories as portable NIP-78 Nostr events.
-
-```
-memory_export(limit=50)
-# → {count: 50, signed: true, events: [...]}
-```
-
-### `ln_budget_status`
-
-Check L402 gateway earnings and payment stats.
-
-```
-ln_budget_status()
-# → {total_earned_sats: 150, total_payments: 42, by_operation: {"memory_query": 80, ...}}
-```
+- **Nostr identity**: Agent identity = Nostr keypair (BIP-340). No accounts, no API keys.
+- **Local-first**: SQLite with FTS5 full-text search + optional ONNX semantic search. Works offline.
+- **Nostr sync**: Memories written as NIP-78 events to relays. Portable, tamper-proof.
+- **L402 payments**: Pay-per-query gateway. 1-10 sats per operation.
+- **Memory quality**: Deduplication, contradiction detection, noise filtering, recency-weighted ranking, access tracking.
 
 ## L402 Gateway
 
-Lightning Memory includes an L402 pay-per-query HTTP gateway. Remote agents pay Lightning micropayments to query your memory engine — no API keys, no accounts.
-
-### Install
+Run an L402 pay-per-query HTTP gateway. Other agents pay Lightning micropayments to access your agent's memory — no API keys, no accounts.
 
 ```bash
 pip install lightning-memory[gateway]
-```
-
-### Start
-
-```bash
-lightning-memory-gateway
-# Listening on 0.0.0.0:8402
+lightning-memory-gateway  # Listening on 0.0.0.0:8402
 ```
 
 ### How L402 Works
@@ -373,158 +222,62 @@ Agent                          Gateway                      Phoenixd
 
 ### Phoenixd Setup
 
-The gateway needs a Lightning node to create invoices. [Phoenixd](https://phoenix.acinq.co/server) is the simplest option — zero config, auto channel management.
-
-1. Download and run Phoenixd (listens on `localhost:9740`)
+1. Download and run [Phoenixd](https://phoenix.acinq.co/server) (listens on `localhost:9740`)
 2. Fund it with ~10,000 sats for initial channel opening
-3. Configure the gateway:
-
-```bash
-mkdir -p ~/.lightning-memory
-cat > ~/.lightning-memory/config.json << 'EOF'
-{
-  "phoenixd_password": "<from ~/.phoenix/phoenix.conf>"
-}
-EOF
-```
-
+3. Configure: `~/.lightning-memory/config.json` → `{"phoenixd_password": "<from ~/.phoenix/phoenix.conf>"}`
 4. Start: `lightning-memory-gateway`
 
 ### Docker
-
-Run the gateway and Phoenixd together:
 
 ```bash
 PHOENIXD_PASSWORD=your-password docker compose up
 ```
 
-This starts the L402 gateway on port 8402 with Phoenixd as a sidecar on port 9740. Lightning state is persisted in a Docker volume.
-
-### Client Example
-
-```bash
-# Using lnget (auto-pays Lightning invoices):
-lnget https://your-server.com/ln/vendor/bitrefill
-
-# Manual flow with curl:
-curl https://your-server.com/memory/query?q=openai+rate+limits
-# → 402 + invoice in WWW-Authenticate header
-# Pay the invoice, extract preimage
-curl -H "Authorization: L402 <macaroon>:<preimage>" \
-  https://your-server.com/memory/query?q=openai+rate+limits
-# → 200 + relevant memories
-```
-
 ## CLI Commands
 
-### `lightning-memory relay-status`
-
-Check connection status for all configured Nostr relays:
-
 ```bash
-lightning-memory relay-status
-# Checking 3 relay(s)...
-#
-#   [+] wss://relay.damus.io: OK
-#   [+] wss://nos.lol: OK
-#   [x] wss://relay.nostr.band: FAIL (timeout)
-#
-# 2/3 relays reachable (5.2s)
-# Last pull: 2026-03-09 04:30:12 UTC
-# Memories pushed: 42
-```
-
-### `lightning-memory-manifest`
-
-Generate a `.well-known/lightning-memory.json` manifest for DNS-based gateway discovery:
-
-```bash
-lightning-memory-manifest > .well-known/lightning-memory.json
-```
-
-### `lightning-memory stats`
-
-Show a memory statistics dashboard:
-
-```bash
-lightning-memory stats
-# Lightning Memory — Statistics Dashboard
-# ==========================================
-#   Agent: 7222215a5eba8547...
-#   Total memories: 147
-#
-#   By type:
-#     transaction              89
-#     vendor                   23
-#     decision                 18
-#     error                    12
-#     attestation               5
-#
-#   Spending (30d): 42,500 sats across 89 txns
-#   Top vendors:
-#     bitrefill.com                    15,200 sats
-#     openai.l402.io                    8,300 sats
-#
-#   Semantic search: active
-```
-
-### `lightning-memory export [json|csv]`
-
-Export memories to JSON or CSV:
-
-```bash
-lightning-memory export json > backup.json
-lightning-memory export csv > backup.csv
+lightning-memory                  # Start MCP server
+lightning-memory stats            # Memory statistics dashboard
+lightning-memory export json      # Export memories as JSON
+lightning-memory export csv       # Export memories as CSV
+lightning-memory relay-status     # Check Nostr relay connectivity
+lightning-memory-gateway          # Start L402 HTTP gateway
+lightning-memory-manifest         # Generate gateway discovery manifest
 ```
 
 ## Relay Configuration
 
-Memories sync to Nostr relays via NIP-78 events. Default relays:
+Default relays: `wss://relay.damus.io`, `wss://nos.lol`, `wss://relay.nostr.band`
 
-```json
-["wss://relay.damus.io", "wss://nos.lol", "wss://relay.nostr.band"]
-```
-
-To customize, create `~/.lightning-memory/config.json`:
+Customize in `~/.lightning-memory/config.json`:
 
 ```json
 {
-  "relays": [
-    "wss://relay.damus.io",
-    "wss://nos.lol",
-    "wss://relay.nostr.band",
-    "wss://relay.primal.net"
-  ],
+  "relays": ["wss://relay.damus.io", "wss://nos.lol", "wss://relay.primal.net"],
   "sync_timeout_seconds": 30,
   "max_events_per_sync": 500
 }
 ```
-
-**Choosing relays:**
 
 | Relay | Speed | Reliability | Notes |
 |-------|-------|-------------|-------|
 | `wss://relay.damus.io` | Fast | High | Most popular, good uptime |
 | `wss://nos.lol` | Fast | High | Reliable, good NIP-78 support |
 | `wss://relay.nostr.band` | Medium | Medium | Search-focused, may be slow |
-| `wss://relay.primal.net` | Fast | High | Primal's relay, well-maintained |
+| `wss://relay.primal.net` | Fast | High | Well-maintained |
 | `wss://nostr.wine` | Fast | High | Paid relay, less spam |
 
-**Tips:**
-- Use 2-3 relays for redundancy — Lightning Memory deduplicates across relays
-- Check relay health: `lightning-memory relay-status`
-- Relays with a circuit breaker tripped are automatically skipped until they recover
+## Optional: Semantic Search
 
-## How It Works
+Add ONNX-based semantic similarity search alongside FTS5 keyword search:
 
-1. **First run**: A Nostr keypair is generated and stored at `~/.lightning-memory/keys/`
-2. **Storing**: Memories go to local SQLite with FTS5 indexing. Each memory is tagged with your agent's public key.
-3. **Querying**: Full-text search with BM25 ranking returns the most relevant memories. With `pip install lightning-memory[semantic]`, queries also use ONNX-based semantic similarity for concept matching.
-4. **Identity**: Your agent's public key is a globally unique, cryptographically verifiable identifier. No accounts needed.
+```bash
+pip install lightning-memory[semantic]
+```
+
+Queries then use hybrid ranking: FTS5 BM25 + cosine similarity with reciprocal rank fusion. "Which vendors are reliable for transcription" matches memories containing "whisper API" and "audio-to-text" even without exact keyword overlap.
 
 ## Data Storage
-
-All data is stored locally:
 
 ```
 ~/.lightning-memory/
@@ -537,14 +290,12 @@ All data is stored locally:
 ## Roadmap
 
 - [x] Phase 1: MCP server with local SQLite storage
-- [x] Phase 2: Lightning intelligence layer (vendor reputation, spending summary, anomaly detection)
-- [x] Phase 3: Nostr relay sync (NIP-78 events, Schnorr signing, bidirectional sync)
-- [x] Phase 4: L402 payment gateway (macaroons, Phoenixd, Starlette HTTP gateway)
-- [x] Phase 5: Compliance & trust layer (budget enforcement, vendor KYC, community reputation, payment pre-flight gate)
-- [x] Phase 5.1: Community reputation — live NIP-85 trust attestation sync
-- [x] Phase 5.2: Compliance integration — KYA attestations, LNURL-auth sessions, compliance reports
-- [x] Phase 6: Memory marketplace — gateway discovery (Nostr + DNS), remote L402 queries, gateway client
-- [x] Phase 7: Agent reliability — vendor normalization, deduplication, memory edit, semantic search, circuit breakers, L402 idempotency
+- [x] Phase 2: Lightning intelligence (vendor reputation, spending summary, anomaly detection)
+- [x] Phase 3: Nostr relay sync (NIP-78, Schnorr signing, bidirectional sync)
+- [x] Phase 4: L402 payment gateway (macaroons, Phoenixd, HTTP gateway)
+- [x] Phase 5: Compliance & trust (budget enforcement, vendor KYC, community reputation, pre-flight gate)
+- [x] Phase 6: Memory marketplace (gateway discovery, remote L402 queries, gateway client)
+- [x] Phase 7: Agent reliability (semantic search, deduplication, contradiction detection, circuit breakers)
 
 ## Star History
 
