@@ -72,6 +72,37 @@ class TestStats:
         assert stats["total"] == 1
 
 
+class TestDelete:
+    def test_delete_existing(self, engine):
+        result = engine.store("memory to delete later")
+        mid = result["id"]
+        from lightning_memory.db import delete_memory
+        assert delete_memory(engine.conn, mid) is True
+        # Should be gone from list
+        assert len(engine.list()) == 0
+
+    def test_delete_nonexistent(self, engine):
+        from lightning_memory.db import delete_memory
+        assert delete_memory(engine.conn, "nonexistent-id") is False
+
+    def test_delete_removes_from_fts(self, engine):
+        """Deleted memories should not appear in search results."""
+        result = engine.store("unique searchable bitcoin content")
+        mid = result["id"]
+        from lightning_memory.db import delete_memory
+        delete_memory(engine.conn, mid)
+        results = engine.query("unique searchable bitcoin")
+        assert len(results) == 0
+
+    def test_delete_count_decreases(self, engine):
+        r1 = engine.store("first memory for counting")
+        engine.store("second memory for counting")
+        assert engine.stats()["total"] == 2
+        from lightning_memory.db import delete_memory
+        delete_memory(engine.conn, r1["id"])
+        assert engine.stats()["total"] == 1
+
+
 class TestParseSince:
     def test_hours(self, engine):
         ts = engine._parse_since("2h")

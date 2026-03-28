@@ -1,11 +1,22 @@
 """Configuration for Lightning Memory.
 
 Loads settings from ~/.lightning-memory/config.json with sensible defaults.
+Environment variables override config file values (useful for Docker):
+
+    LIGHTNING_MEMORY_PHOENIXD_URL       - Phoenixd URL
+    LIGHTNING_MEMORY_PHOENIXD_PASSWORD  - Phoenixd HTTP password
+    LIGHTNING_MEMORY_GATEWAY_PORT       - Gateway listen port
+    LIGHTNING_MEMORY_RELAYS             - Comma-separated relay URLs
+
+Legacy env vars (from docker-compose.yml) are also supported:
+
+    PHOENIXD_URL, PHOENIXD_PASSWORD
 """
 
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -80,8 +91,56 @@ class Config:
 _cached: Config | None = None
 
 
+def _env(name: str, *legacy: str) -> str | None:
+    """Read an env var, falling back to legacy names (e.g. PHOENIXD_URL)."""
+    val = os.environ.get(name)
+    if val is not None:
+        return val
+    for alt in legacy:
+        val = os.environ.get(alt)
+        if val is not None:
+            return val
+    return None
+
+
+def _apply_env_overrides(cfg: Config) -> Config:
+    """Override config fields from environment variables.
+
+    Namespaced vars (LIGHTNING_MEMORY_*) take priority, but bare names
+    like PHOENIXD_URL are also accepted for docker-compose compatibility.
+    """
+    val = _env("LIGHTNING_MEMORY_PHOENIXD_URL", "PHOENIXD_URL")
+    if val:
+        cfg.phoenixd_url = val
+
+    val = _env("LIGHTNING_MEMORY_PHOENIXD_PASSWORD", "PHOENIXD_PASSWORD")
+    if val:
+        cfg.phoenixd_password = val
+
+    val = _env("LIGHTNING_MEMORY_GATEWAY_PORT")
+    if val:
+        try:
+            cfg.gateway_port = int(val)
+        except ValueError:
+            pass
+
+    val = _env("LIGHTNING_MEMORY_RELAYS")
+    if val:
+        cfg.relays = [r.strip() for r in val.split(",") if r.strip()]
+
+    val = _env("LIGHTNING_MEMORY_GATEWAY_URL")
+    if val:
+        cfg.gateway_url = val
+
+    return cfg
+
+
 def load_config(path: Path | None = None) -> Config:
-    """Load config from disk, or return defaults if not found."""
+    """Load config from disk, then apply environment variable overrides.
+
+    Env vars always win over config.json values, so Docker deployments
+    can configure the gateway without mounting a config file.
+    """
     global _cached
     if _cached is not None:
         return _cached
@@ -110,6 +169,7 @@ def load_config(path: Path | None = None) -> Config:
     else:
         _cached = Config()
 
+    _apply_env_overrides(_cached)
     return _cached
 
 

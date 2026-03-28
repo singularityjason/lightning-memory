@@ -6,9 +6,9 @@ from lightning_memory import server
 
 
 def test_tool_count():
-    """Server should expose 22 tools."""
+    """Server should expose 23 tools."""
     tools = server.mcp._tool_manager._tools
-    assert len(tools) == 22, f"Expected 22, got {len(tools)}: {list(tools.keys())}"
+    assert len(tools) == 23, f"Expected 23, got {len(tools)}: {list(tools.keys())}"
 
 
 class TestToolRoundTrip:
@@ -68,6 +68,49 @@ class TestToolRoundTrip:
         result = server.memory_list()
         assert "by_type" in result
         assert result["by_type"]["transaction"] == 1
+
+
+class TestMemoryDelete:
+    """Tests for the memory_delete MCP tool."""
+
+    def setup_method(self):
+        from lightning_memory.db import get_connection
+        from lightning_memory.memory import MemoryEngine
+        from lightning_memory.nostr import NostrIdentity
+
+        conn = get_connection(":memory:")
+        identity = NostrIdentity.generate()
+        server._engine = MemoryEngine(conn=conn, identity=identity)
+
+    def teardown_method(self):
+        server._engine = None
+
+    def test_delete_existing_memory(self):
+        store_result = server.memory_store(content="memory to be deleted")
+        mid = store_result["id"]
+        delete_result = server.memory_delete(id=mid)
+        assert delete_result["status"] == "deleted"
+        assert delete_result["id"] == mid
+
+    def test_delete_nonexistent_memory(self):
+        result = server.memory_delete(id="does-not-exist")
+        assert "error" in result
+
+    def test_delete_removes_from_query(self):
+        store_result = server.memory_store(
+            content="unique bitcoin lightning payment for deletion test"
+        )
+        mid = store_result["id"]
+        server.memory_delete(id=mid)
+        query_result = server.memory_query(query="unique bitcoin lightning")
+        assert query_result["count"] == 0
+
+    def test_delete_reduces_total_count(self):
+        server.memory_store(content="first memory to keep")
+        r2 = server.memory_store(content="second memory to remove")
+        assert server.memory_list()["total_memories"] == 2
+        server.memory_delete(id=r2["id"])
+        assert server.memory_list()["total_memories"] == 1
 
 
 def test_memory_sync_pulls_trust_assertions(engine):

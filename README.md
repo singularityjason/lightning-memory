@@ -81,7 +81,7 @@ lightning-memory  # starts MCP server
 | MCP native | Yes | Plugin | No | No |
 | Zero config | Yes | API key required | Manual setup | N/A |
 
-## Tools (22)
+## Tools (23)
 
 ### Memory
 
@@ -91,6 +91,7 @@ lightning-memory  # starts MCP server
 | `memory_query` | Search by relevance (FTS5 + optional semantic search) |
 | `memory_list` | List memories with type/time filters |
 | `memory_edit` | Edit content or metadata with audit trail |
+| `memory_delete` | Delete a memory by ID (removes from DB and search index) |
 | `memory_sync` | Sync with Nostr relays (push/pull) |
 | `memory_export` | Export as NIP-78 Nostr events |
 

@@ -1,4 +1,4 @@
-"""Lightning Memory MCP server: 21 tools for agent memory, intelligence, and sync."""
+"""Lightning Memory MCP server: 22 tools for agent memory, intelligence, and sync."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import json
 
 from mcp.server.fastmcp import FastMCP
 
+from . import db
 from .budget import BudgetEngine
 from .config import load_config
 from .intelligence import IntelligenceEngine
@@ -196,6 +197,27 @@ def memory_edit(
     meta = json.loads(metadata) if isinstance(metadata, str) and metadata != "{}" else None
     result = engine.edit(memory_id=id, new_content=content, new_metadata=meta)
     return result
+
+
+@mcp.tool()
+def memory_delete(id: str) -> dict:
+    """Delete a memory by ID.
+
+    Use this to remove outdated, incorrect, or irrelevant memories.
+    Deletion is permanent — the memory is removed from both the main
+    table and the full-text search index.
+
+    Args:
+        id: The memory ID to delete.
+
+    Returns:
+        Confirmation with the deleted ID, or an error if not found.
+    """
+    engine = _get_engine()
+    deleted = db.delete_memory(engine.conn, id)
+    if deleted:
+        return {"status": "deleted", "id": id}
+    return {"error": f"Memory {id} not found"}
 
 
 def _get_intelligence() -> IntelligenceEngine:
